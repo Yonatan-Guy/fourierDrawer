@@ -134,13 +134,13 @@
             <option>8192</option>
           </select><span class="hint">must be a power of two</span></div>
         <div class="row"><label>max epicycles</label>
-          <input type="number" id="maxArms" value="700" min="1" max="4000">
+          <input type="number" id="maxArms" value="400" min="1" max="4000">
           <span class="hint">400 is plenty for most shapes</span></div>
         <div class="row"><label>epicycles at start</label>
-          <input type="number" id="startArms" value="50" min="1">
+          <input type="number" id="startArms" value="8" min="1">
           <span class="hint">start low, slide up to watch it sharpen</span></div>
         <div class="row"><label>speed</label>
-          <select id="speed"><option selected>1</option><option>2</option>
+          <select id="speed"><option>1</option><option selected>2</option>
             <option>4</option><option>8</option></select>
           <span class="hint">changeable while it runs</span></div>
         <div class="row"><label>pen colour</label>
@@ -362,11 +362,20 @@ function chainPieces(pieces, n){
   if (!pieces.length) throw new Error('nothing to chain');
 
   let path = pieces[0].concat([pieces[0][0]]);
-  for (let k = 1; k < pieces.length; k++){
-    const loop = pieces[k];
-    const [i, j] = nearestPair(path, loop);
-    const branch = loop.slice(j).concat(loop.slice(0, j), [loop[j]]);
-    path = path.slice(0, i + 1).concat(branch, path.slice(i));   // out and back
+  const left = pieces.slice(1);
+  while (left.length){
+    // Take whichever piece is CLOSEST to what is already drawn, not simply the
+    // next biggest -- Prim's algorithm. Adding by size can splice in a far
+    // piece early and leave a long line across the picture.
+    let bk = 0, bi = 0, bj = 0, bd = Infinity;
+    left.forEach((loop, k) => {
+      const [i, j] = nearestPair(path, loop);
+      const d = Math.hypot(path[i][0]-loop[j][0], path[i][1]-loop[j][1]);
+      if (d < bd){ bd = d; bk = k; bi = i; bj = j; }
+    });
+    const loop = left.splice(bk, 1)[0];
+    const branch = loop.slice(bj).concat(loop.slice(0, bj), [loop[bj]]);
+    path = path.slice(0, bi + 1).concat(branch, path.slice(bi));  // out and back
   }
   return normalise(resample(path, n));
 }
