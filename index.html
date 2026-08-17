@@ -118,7 +118,10 @@
   #hud3d{position:absolute;top:12px;left:14px;right:14px;display:flex;
          align-items:center;gap:12px;pointer-events:none}
   #hud3d b{font-size:12px}
-  #hud3d button{margin-left:auto;pointer-events:auto}
+  #views3d{margin-left:auto;display:flex;gap:6px;pointer-events:auto;
+           flex-wrap:wrap}
+  #views3d button{font-size:11px;padding:5px 9px}
+  #hud3d #close3d{pointer-events:auto;margin-left:10px}
 </style>
 </head>
 <body>
@@ -191,7 +194,13 @@
   <canvas id="cv3d"></canvas>
   <div id="hud3d">
     <b>the curve in time</b>
-    <span class="hint">drag to rotate · the drawing is its shadow at t=0</span>
+    <span class="hint">drag to rotate</span>
+    <span id="views3d">
+      <button data-yaw="-0.9"   data-pitch="0.5">angled</button>
+      <button data-yaw="1.5708" data-pitch="0">front — the drawing</button>
+      <button data-yaw="0"      data-pitch="-1.5708">x(t) — cosines</button>
+      <button data-yaw="0"      data-pitch="0">y(t) — sines</button>
+    </span>
     <button id="close3d">close</button>
   </div>
 </div>
@@ -1099,7 +1108,23 @@ function frame(){
 // drawing and the two waveforms
 // ==========================================================
 const cv3d = $('#cv3d'), cx3d = cv3d.getContext('2d');
-const cam = {yaw:-0.9, pitch:0.5, open:false};
+const cam = {yaw:-0.9, pitch:0.5, open:false, toYaw:null, toPitch:null};
+
+function faceTo(yaw, pitch, btn){      // glide there, so you keep your bearings
+  cam.toYaw = yaw; cam.toPitch = pitch;
+  document.querySelectorAll('#views3d button').forEach(b =>
+    b.classList.toggle('on', b === btn));
+}
+
+function easeCamera(){
+  if (cam.toYaw === null) return;
+  const dy = cam.toYaw - cam.yaw, dp = cam.toPitch - cam.pitch;
+  if (Math.abs(dy) < 1e-4 && Math.abs(dp) < 1e-4){
+    cam.yaw = cam.toYaw; cam.pitch = cam.toPitch; cam.toYaw = null;
+    return;
+  }
+  cam.yaw += dy * 0.18; cam.pitch += dp * 0.18;
+}
 
 function project(p, w, h){                 // orthographic, yaw then pitch
   const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
@@ -1113,6 +1138,7 @@ function project(p, w, h){                 // orthographic, yaw then pitch
 
 function draw3d(){
   if (!cam.open) return;
+  easeCamera();
   const dpr = window.devicePixelRatio || 1;
   const r = cv3d.getBoundingClientRect();
   cv3d.width = r.width*dpr; cv3d.height = r.height*dpr;
@@ -1160,6 +1186,15 @@ function draw3d(){
   cx3d.fillStyle = '#8b8b8b'; cx3d.font = '11px system-ui';
   const lab = (p, s) => { const q = project(p, w, h); cx3d.fillText(s, q[0], q[1]); };
   lab([1.15,-1,-1], 't');  lab([-1,1.15,-1], 'x(t)');  lab([-1,-1,1.15], 'y(t)');
+  const near = (a, b) => Math.abs(a - b) < 0.02;
+  const note = near(cam.yaw, 1.5708) && near(cam.pitch, 0)
+      ? 'looking down the time axis — this is the drawing itself'
+    : near(cam.yaw, 0) && near(cam.pitch, -1.5708)
+      ? 'x against t — every epicycle is one cosine in here'
+    : near(cam.yaw, 0) && near(cam.pitch, 0)
+      ? 'y against t — the same terms as sines'
+    : '';
+  if (note){ cx3d.fillStyle = '#6b6b6b'; cx3d.fillText(note, 14, 22); }
   cx3d.fillStyle = '#6b6b6b';
   cx3d.fillText(run.n + ' epicycles', 14, h - 14);
 }
@@ -1172,9 +1207,14 @@ cv3d.addEventListener('pointermove', e => {
   if (!drag) return;
   cam.yaw   += (e.clientX - drag[0]) * 0.01;
   cam.pitch += (e.clientY - drag[1]) * 0.01;
-  cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch));
+  cam.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, cam.pitch));
+  cam.toYaw = null;                                  // a drag beats a preset
+  document.querySelectorAll('#views3d button').forEach(b => b.classList.remove('on'));
   drag = [e.clientX, e.clientY];
 });
+
+document.querySelectorAll('#views3d button').forEach(b =>
+  b.onclick = () => faceTo(+b.dataset.yaw, +b.dataset.pitch, b));
 cv3d.addEventListener('pointerup', () => drag = null);
 
 // ==========================================================
