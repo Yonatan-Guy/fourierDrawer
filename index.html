@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fourier drawing</title>
+<style>
+  :root{
+    --bg:#000; --panel:#141414; --line:#2a2a2a; --fg:#e8e8e8; --dim:#8b8b8b;
+    --arm:#ffffff; --trace:#ff2d2d; --target:#3a3a3a;
+    --x:#4dc3ff; --y:#ffb347; --sum:#b48cff; --part:#3f5f78; --accent:#3c8dbc;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;overflow-x:hidden;background:var(--bg);color:var(--fg);
+       font:13px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  button,select,input{font:inherit;color:var(--fg)}
+  button{background:#2b2b2b;border:1px solid var(--line);border-radius:5px;
+         padding:6px 12px;cursor:pointer}
+  button:hover{background:#3a3a3a}
+  button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  select,input[type=text],input[type=number]{background:#1c1c1c;
+         border:1px solid var(--line);border-radius:5px;padding:5px 7px}
+  input[type=range]{accent-color:var(--trace)}
+  .hint{color:var(--dim);font-size:11px}
+
+  /* ---------- setup ---------- */
+  #setup{position:fixed;inset:0;background:#0c0c0c;display:flex;
+         align-items:center;justify-content:center;padding:20px;z-index:10;
+         overflow:auto}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+        padding:18px 20px;margin-bottom:12px}
+  .card h2{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--fg)}
+  .card h2 span{color:var(--dim);font-weight:400}
+  #setupInner{display:grid;grid-template-columns:minmax(420px,1fr) 240px;
+              gap:14px;max-width:900px;width:100%}
+  .row{display:grid;grid-template-columns:130px 170px 1fr;align-items:center;
+       gap:10px;margin-bottom:7px}
+  .row label{color:var(--fg)}
+  .row .hint{grid-column:3}
+  #desc{color:var(--dim);font-size:11.5px;min-height:48px;margin-top:8px;
+        white-space:pre-line}
+  #zone{border:2px dashed #3f5f78;border-radius:10px;background:#101820;
+        height:210px;display:flex;flex-direction:column;align-items:center;
+        justify-content:center;gap:6px;cursor:pointer;text-align:center;
+        transition:.15s}
+  #zone.hot{border-color:var(--accent);background:#15263200}
+  #zone.hot{background:#152632}
+  #zone svg{opacity:.75}
+  #zone b{font-size:13px}
+  #footer{display:flex;justify-content:flex-end;align-items:center;gap:10px}
+  #footer .hint{margin-right:auto}
+  #err{color:#ff7676;font-size:12px;min-height:16px;margin-top:6px}
+
+  /* ---------- app ---------- */
+  #app{display:none;height:100dvh;min-width:0;grid-template-rows:1fr auto;}
+  #stage{display:grid;grid-template-columns:1fr 420px;min-height:0;overflow:hidden}
+  #stage.big{grid-template-columns:1fr 0}
+  #stage.big #side{display:none}
+  #main{position:relative;min-width:0;min-height:0;overflow:hidden}
+  /* absolute so the canvas can never inflate its own container and cover the bar */
+  #main canvas,#side canvas{position:absolute;inset:0;display:block;
+        width:100%;height:100%}
+  #side{border-left:1px solid var(--line);position:relative;min-width:0;
+        min-height:0;overflow:hidden}
+  #bar{border-top:1px solid var(--line);padding:10px 14px;display:flex;
+       position:relative;z-index:2;
+       align-items:center;gap:10px;flex-wrap:wrap;background:#0d0d0d}
+  #bar .grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  #armsWrap{display:flex;align-items:center;gap:8px;flex:1;min-width:260px}
+  #arms{flex:1}
+  #armsVal{min-width:46px;text-align:right;color:var(--dim)}
+  #title{position:absolute;top:12px;left:0;right:0;text-align:center;
+         color:var(--dim);pointer-events:none;font-size:12px}
+  #keys{color:var(--dim);font-size:10.5px}
+
+  /* ---------- phones and narrow windows ---------- */
+  @media (max-width:760px){
+    #setup{padding:10px;align-items:flex-start}
+    #setupInner{grid-template-columns:1fr;max-width:100%}
+    #setupInner>div:last-child{order:-1}          /* drop zone on top */
+    #zone{height:130px}
+    .card{padding:14px}
+    .row{grid-template-columns:120px 1fr;gap:6px}
+    .row span:has(input),.row span:has(select),.row span:has(button){width:100%}
+    .row input,.row select,.row button{width:100%}
+    .row .hint{grid-column:1/-1;font-size:10.5px;margin:-2px 0 4px}
+    #desc{font-size:11px}
+    #footer{position:sticky;bottom:0;background:#0c0c0c;padding:8px 0}
+    #footer button{padding:10px 22px}
+
+    #stage{grid-template-columns:1fr;grid-template-rows:1fr 32vh}
+    #stage.big{grid-template-rows:1fr 0}
+    #side{border-left:none;border-top:1px solid var(--line)}
+    #bar{gap:6px;padding:8px 8px;justify-content:center}
+    #bar button{padding:9px 11px;font-size:12px}
+    #bar .grp{justify-content:center}
+    #armsWrap{flex:1 0 100%;min-width:0}
+    #keys{display:none}                            /* no keyboard on a phone */
+    #title{font-size:11px;top:6px}
+  }
+
+  #view3d{position:fixed;inset:0;background:#000;z-index:15;display:none}
+  #view3d canvas{position:absolute;inset:0;width:100%;height:100%;
+                 cursor:grab;touch-action:none}
+  #view3d canvas:active{cursor:grabbing}
+  #hud3d{position:absolute;top:12px;left:14px;right:14px;display:flex;
+         align-items:center;gap:12px;pointer-events:none}
+  #hud3d b{font-size:12px}
+  #hud3d button{margin-left:auto;pointer-events:auto}
+</style>
+</head>
+<body>
+<!-- ============ setup screen ============ -->
+<div id="setup">
+  <div id="setupInner">
+    <div>
+      <div class="card">
+        <h2>1. <span>Where the points come from</span></h2>
+        <select id="source" style="width:100%"></select>
+        <div id="desc"></div>
+      </div>
+
+      <div class="card">
+        <h2>2. <span>Settings for that source</span></h2>
+        <div id="params"></div>
+        <div id="err"></div>
+      </div>
+
+      <div class="card">
+        <h2>3. <span>How it draws</span></h2>
+        <div class="row"><label>outline samples</label>
+          <select id="nSamples">
+            <option>1024</option><option selected>2048</option><option>4096</option>
+            <option>8192</option>
+          </select><span class="hint">must be a power of two</span></div>
+        <div class="row"><label>max epicycles</label>
+          <input type="number" id="maxArms" value="400" min="1" max="4000">
+          <span class="hint">400 is plenty for most shapes</span></div>
+        <div class="row"><label>epicycles at start</label>
+          <input type="number" id="startArms" value="50" min="1">
+          <span class="hint">start low, slide up to watch it sharpen</span></div>
+        <div class="row"><label>speed</label>
+          <select id="speed"><option selected>1</option><option>2</option>
+            <option>4</option><option>8</option></select>
+          <span class="hint">changeable while it runs</span></div>
+        <div class="row"><label>pen colour</label>
+          <span><input type="color" id="penColour" value="#ff2d2d"
+                       style="width:44px;height:28px;padding:2px;background:#1c1c1c;
+                              border:1px solid var(--line);border-radius:5px">
+          </span><span class="hint">click to pick any colour</span></div>
+      </div>
+
+      <div id="footer">
+        <span class="hint">drop a file anywhere on this page</span>
+        <button id="draw" style="background:#1d4f6b;border-color:#2a7ba5">Draw</button>
+      </div>
+    </div>
+
+    <div>
+      <div id="zone">
+        <svg width="56" height="56" viewBox="0 0 56 56" fill="none"
+             stroke="#7f9aa8" stroke-width="5" stroke-linecap="round">
+          <path d="M28 8 v22"/><path d="M17 22 L28 34 L39 22"/>
+          <path d="M12 34 v10 h32 v-10"/>
+        </svg>
+        <b>Choose a file</b>
+        <span class="hint">or drag it here</span>
+        <span class="hint">png · jpg · svg · csv</span>
+      </div>
+      <input type="file" id="fileInput" hidden
+             accept=".png,.jpg,.jpeg,.gif,.bmp,.webp,.svg,.csv,.txt">
+      <div class="hint" id="fileName" style="margin-top:8px;word-break:break-all"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 3D view ============ -->
+<div id="view3d">
+  <canvas id="cv3d"></canvas>
+  <div id="hud3d">
+    <b>the curve in time</b>
+    <span class="hint">drag to rotate · the drawing is its shadow at t=0</span>
+    <button id="close3d">close</button>
+  </div>
+</div>
+
+<!-- ============ drawing screen ============ -->
+<div id="app">
+  <div id="stage">
+    <div id="main">
+      <canvas id="draw2d"></canvas>
+      <div id="title"></div>
+    </div>
+    <div id="side"><canvas id="waves"></canvas></div>
+  </div>
+  <div id="bar">
+    <div id="armsWrap">
+      <span>epicycles</span>
+      <input type="range" id="arms" min="1" max="400" value="8">
+      <span id="armsVal">8</span>
+    </div>
+    <div class="grp" id="speeds"></div>
+    <div class="grp">
+      <button id="bGuide">Guide</button>
+      <button id="bPause">Pause</button>
+      <button id="bClear">Clear</button>
+      <button id="bSave">Save PNG</button>
+      <button id="bBig">Big view</button>
+      <button id="b3d">3D</button>
+      <button id="bSetup">⚙ Setup</button>
+    </div>
+    <span id="keys">space pause · h guide · c clear · b big · 3 the 3D view</span>
+  </div>
+</div>
+
+<script>
+// ---------- math core (shared by the page; kept separate so it can be tested) ----------
+
+function fft(re, im) {                     // in-place, N must be a power of two
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {     // bit reversal
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const ur = re[i + k], ui = im[i + k];
+        const vr = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci;
+        const vi = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr;
+        re[i + k] = ur + vr; im[i + k] = ui + vi;
+        re[i + k + len / 2] = ur - vr; im[i + k + len / 2] = ui - vi;
+        const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
+      }
+    }
+  }
+}
+
+function resample(pts, n) {                // walk the closed outline at constant speed
+  const m = pts.length;
+  const dist = [0];
+  for (let i = 1; i <= m; i++) {
+    const a = pts[i - 1], b = pts[i % m];
+    dist.push(dist[i - 1] + Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  const total = dist[m];
+  const out = [];
+  let j = 0;
+  for (let i = 0; i < n; i++) {
+    const t = total * i / n;
+    while (j < m && dist[j + 1] < t) j++;
+    const span = dist[j + 1] - dist[j] || 1;
+    const f = (t - dist[j]) / span;
+    const a = pts[j % m], b = pts[(j + 1) % m];
+    out.push([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]);
+  }
+  return out;
+}
+
+function center(pts) {
+  let cx = 0, cy = 0;
+  for (const p of pts) { cx += p[0]; cy += p[1]; }
+  cx /= pts.length; cy /= pts.length;
+  return pts.map(p => [p[0] - cx, p[1] - cy]);
+}
+
+function fourier(shape, maxArms) {         // shape: centred [[x,y]...], length a power of 2
+  const n = shape.length;
+  const re = new Float64Array(n), im = new Float64Array(n);
+  for (let i = 0; i < n; i++) { re[i] = shape[i][0]; im[i] = shape[i][1]; }
+  fft(re, im);
+  const terms = [];
+  for (let k = 0; k < n; k++) {
+    const a = re[k] / n, b = im[k] / n;
+    terms.push({ amp: Math.hypot(a, b), phase: Math.atan2(b, a),
+                 freq: k <= n / 2 ? k : k - n });
+  }
+  terms.sort((p, q) => q.amp - p.amp);
+  return terms.slice(0, maxArms);
+}
+
+function otsu(gray) {                      // gray: Uint8 values
+  const hist = new Array(256).fill(0);
+  for (const v of gray) hist[v]++;
+  const total = gray.length;
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * hist[i];
+  let sumB = 0, wB = 0, best = -1, thr = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+    sumB += t * hist[t];
+    const between = wB * wF * Math.pow(sumB / wB - (sum - sumB) / wF, 2);
+    if (between > best) { best = between; thr = t; }
+  }
+  return thr;
+}
+
+function traceAll(mask, w, h, minLen = 12) {   // Moore-neighbour boundary tracing
+  const ring = [[-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1]];
+  const at = (r, c) => (r < 0 || c < 0 || r >= h || c >= w) ? 0 : mask[r * w + c];
+  const seen = new Uint8Array(w * h);
+  const out = [];
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      if (!at(r, c) || seen[r * w + c] || at(r, c - 1)) continue;
+      let back = 6, pr = r, pc = c;
+      const path = [[c, r]];
+      for (let guard = 0; guard < 4 * w * h; guard++) {
+        let moved = false;
+        for (let k = 1; k <= 8; k++) {
+          const d = (back + k) % 8;
+          const nr = pr + ring[d][0], nc = pc + ring[d][1];
+          if (at(nr, nc)) { back = (d + 5) % 8; pr = nr; pc = nc; moved = true; break; }
+        }
+        if (!moved) break;
+        if (pr === r && pc === c) break;
+        path.push([pc, pr]);
+      }
+      for (const p of path) seen[p[1] * w + p[0]] = 1;
+      if (path.length >= minLen) out.push(path);
+    }
+  }
+  out.sort((a, b) => b.length - a.length);
+  return out;
+}
+
+function nearestPair(a, b, budget){          // closest points between two sets
+  budget = budget || 600;
+  const sa = Math.max(1, Math.ceil(a.length / budget));
+  const sb = Math.max(1, Math.ceil(b.length / budget));
+  let bi = 0, bj = 0, bd = Infinity;
+  for (let i = 0; i < a.length; i += sa)
+    for (let j = 0; j < b.length; j += sb){
+      const d = (a[i][0]-b[j][0])**2 + (a[i][1]-b[j][1])**2;
+      if (d < bd){ bd = d; bi = i; bj = j; }
+    }
+  const loA = Math.max(0, bi-sa), hiA = Math.min(a.length, bi+sa+1);
+  const loB = Math.max(0, bj-sb), hiB = Math.min(b.length, bj+sb+1);
+  bd = Infinity; let fi = bi, fj = bj;
+  for (let i = loA; i < hiA; i++)
+    for (let j = loB; j < hiB; j++){
+      const d = (a[i][0]-b[j][0])**2 + (a[i][1]-b[j][1])**2;
+      if (d < bd){ bd = d; fi = i; fj = j; }
+    }
+  return [fi, fj];
+}
+
+function chainPieces(pieces, n){
+  // Each loop is DETOURED INTO from the nearest point of the path so far, then
+  // the pen returns along the same connector. Choosing a visit order first and
+  // hopping between loops afterwards strands the pen at each loop's entry
+  // point, which is what draws a long line straight across the picture.
+  pieces = pieces.filter(p => p.length > 2).sort((a, b) => b.length - a.length);
+  if (!pieces.length) throw new Error('nothing to chain');
+
+  let path = pieces[0].concat([pieces[0][0]]);
+  for (let k = 1; k < pieces.length; k++){
+    const loop = pieces[k];
+    const [i, j] = nearestPair(path, loop);
+    const branch = loop.slice(j).concat(loop.slice(0, j), [loop[j]]);
+    path = path.slice(0, i + 1).concat(branch, path.slice(i));   // out and back
+  }
+  return normalise(resample(path, n));
+}
+
+function normalise(pts) {                  // centre and scale to roughly +-10
+  const c = center(pts);
+  let max = 0;
+  for (const p of c) max = Math.max(max, Math.hypot(p[0], p[1]));
+  return max ? c.map(p => [p[0] / max * 10, p[1] / max * 10]) : c;
+}
+
+
+// ==========================================================
+// SOURCES — shapes, text, images, svg, csv, mouse
+// ==========================================================
+const SHAPES = {
+  circle:{r:10, n:200},
+  polygon:{sides:6, r:10},
+  star:{points:5, r_outer:10, r_inner:4},
+  flower:{petals:7, r:10, depth:0.35, n:400},
+  gear:{teeth:12, r:10, tooth:1.5, n:600},
+  heart:{scale:0.6, n:400},
+  spirograph:{R:10, r:3.1, d:6, n:2000, turns:31},
+  diamond:{}
+};
+const SHAPE_HELP = {
+  n:'how many points', r:'radius', scale:'overall size',
+  sides:'number of sides', points:'number of spikes',
+  r_outer:'tip radius', r_inner:'inner corner radius',
+  petals:'number of petals', depth:'how deep the petals cut (0-1)',
+  teeth:'number of teeth', tooth:'tooth height',
+  R:'big fixed circle', d:'pen distance from its centre',
+  turns:'laps before it repeats'
+};
+const SHAPE_HELP_BY = {
+  gear:{r:'radius at mid-tooth'}, flower:{r:'average radius'},
+  spirograph:{r:'small rolling circle'}
+};
+const helpFor = (shape, key) =>
+  (SHAPE_HELP_BY[shape] || {})[key] || SHAPE_HELP[key] || '';
+
+function makeShape(name, p){
+  const out = [], TAU = Math.PI * 2;
+  const push = (x, y) => out.push([x, y]);
+  if (name === 'circle')
+    for (let i=0;i<p.n;i++){const t=TAU*i/p.n; push(p.r*Math.cos(t), p.r*Math.sin(t));}
+  else if (name === 'polygon')
+    for (let i=0;i<p.sides;i++){const t=TAU*i/p.sides; push(p.r*Math.cos(t), p.r*Math.sin(t));}
+  else if (name === 'star')
+    for (let i=0;i<2*p.points;i++){
+      const t=TAU*i/(2*p.points), r=i%2?p.r_inner:p.r_outer;
+      push(r*Math.cos(t), r*Math.sin(t));
+    }
+  else if (name === 'flower')
+    for (let i=0;i<p.n;i++){
+      const t=TAU*i/p.n, rr=p.r*(1+p.depth*Math.cos(p.petals*t));
+      push(rr*Math.cos(t), rr*Math.sin(t));
+    }
+  else if (name === 'gear')
+    for (let i=0;i<p.n;i++){
+      const t=TAU*i/p.n, rr=p.r+p.tooth*Math.tanh(4*Math.sin(p.teeth*t));
+      push(rr*Math.cos(t), rr*Math.sin(t));
+    }
+  else if (name === 'heart')
+    for (let i=0;i<p.n;i++){
+      const t=TAU*i/p.n;
+      push(16*Math.pow(Math.sin(t),3)*p.scale,
+           (13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t))*p.scale);
+    }
+  else if (name === 'spirograph')
+    for (let i=0;i<p.n;i++){
+      const t=TAU*p.turns*i/p.n, k=(p.R-p.r)/p.r;
+      push((p.R-p.r)*Math.cos(t)+p.d*Math.cos(k*t),
+           (p.R-p.r)*Math.sin(t)-p.d*Math.sin(k*t));
+    }
+  else if (name === 'diamond'){
+    const V={A:[140,45],B:[275,32],C:[410,45],L:[25,205],R:[525,205],
+             P:[275,510],G1:[165,205],G2:[385,205]};
+    const route=['L','A','B','C','R','P','L','G1','G2','R','C','G2','B','G1',
+                 'P','G2','G1','A'];
+    route.forEach(k => push(V[k][0], -V[k][1]));
+  }
+  return normalise(out);
+}
+
+// ---- images: threshold, then trace every contour ----
+function pointsFromImage(img, {lineArt = true, invert = false, n = 3000,
+                               minLen = 25, maxShapes = 40} = {}){
+  const scale = Math.min(1, 900 / Math.max(img.width, img.height));
+  const w = Math.max(2, Math.round(img.width * scale));
+  const h = Math.max(2, Math.round(img.height * scale));
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d', {willReadFrequently:true});
+  cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h);   // flatten transparency
+  cx.drawImage(img, 0, 0, w, h);
+  const data = cx.getImageData(0, 0, w, h).data;
+
+  const gray = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++)
+    gray[i] = (data[i*4]*0.299 + data[i*4+1]*0.587 + data[i*4+2]*0.114) | 0;
+
+  let lo = 255, hi = 0;
+  for (const v of gray){ if (v < lo) lo = v; if (v > hi) hi = v; }
+  if (hi - lo < 2) throw new Error('that image is one flat colour — nothing to trace');
+
+  const thr = otsu(gray);
+  const mask = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++)
+    mask[i] = (gray[i] <= thr) !== invert ? 1 : 0;   // otsu's t is
+                                                     // inclusive
+
+  let contours = traceAll(mask, w, h, minLen);
+  if (!contours.length) throw new Error('no shape found — try the invert option');
+  contours = contours.map(c => c.map(p => [p[0], -p[1]]));      // y grows down
+  if (!lineArt) contours = [contours[0]];
+  return chainPieces(contours.slice(0, maxShapes), n);
+}
+
+// ---- text: render the glyphs, then trace them like any image ----
+function pointsFromText(text, {font = 'sans-serif', weight = 'normal',
+                               n = 3000} = {}){
+  const size = 300, pad = 60;
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.font = `${weight} ${size}px ${font}`;
+  const w = Math.ceil(probe.measureText(text).width) + pad * 2;
+  const h = size * 1.6 + pad * 2;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d', {willReadFrequently:true});
+  cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h);
+  cx.fillStyle = '#000';
+  cx.font = `${weight} ${size}px ${font}`;
+  cx.textBaseline = 'middle';
+  cx.fillText(text, pad, h / 2);
+  const img = new Image();
+  return new Promise(res => {
+    img.onload = () => res(pointsFromImage(img, {lineArt:true, n, minLen:20}));
+    img.src = cv.toDataURL();
+  });
+}
+
+// ---- svg: let the browser walk the paths for us ----
+function pointsFromSvg(svgText, {n = 3000, longestOnly = false} = {}){
+  const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+  const svg = doc.documentElement;
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:-9999px;top:0';
+  host.appendChild(svg);
+  document.body.appendChild(host);
+
+  const pieces = [];
+  try {
+    const tags = 'path,polygon,polyline,line,rect,circle,ellipse';
+    for (const el of svg.querySelectorAll(tags)){
+      let len = 0;
+      try { len = el.getTotalLength(); } catch (e) { continue; }
+      if (!len) continue;
+      const steps = Math.max(16, Math.min(1500, Math.round(len / 1.2)));
+      const m = el.getCTM();
+      const pts = [];
+      for (let i = 0; i < steps; i++){
+        const p = el.getPointAtLength(len * i / steps);
+        const x = m ? m.a*p.x + m.c*p.y + m.e : p.x;
+        const y = m ? m.b*p.x + m.d*p.y + m.f : p.y;
+        pts.push([x, -y]);                       // svg y grows down
+      }
+      pieces.push(pts);
+    }
+  } finally { host.remove(); }
+
+  if (!pieces.length) throw new Error('no drawable paths in that svg');
+  pieces.sort((a, b) => b.length - a.length);
+  return chainPieces(longestOnly ? [pieces[0]] : pieces, n);
+}
+
+function pointsFromCsv(text){
+  const pts = text.trim().split(/\r?\n/).map(line => {
+    const parts = line.split(/[,;\s]+/).filter(Boolean).map(Number);
+    return parts.length >= 2 && parts.every(v => isFinite(v))
+      ? [parts[0], parts[1]] : null;
+  }).filter(Boolean);
+  if (pts.length < 3) throw new Error('that csv has fewer than 3 usable points');
+  return normalise(pts);
+}
+
+// ==========================================================
+// SETUP SCREEN
+// ==========================================================
+const SOURCES = {
+  file: {
+    label:'file  —  anything you drop in',
+    desc:'Point it at any file and it works out what to do from the extension:\n'+
+         '.svg is read as vectors, .csv as saved points, pictures get traced.\n'+
+         'The simplest option — start here.',
+    fields:[
+      {k:'file',  t:'file',   label:'file'},
+      {k:'n',     t:'int',    label:'points to sample', v:3000, hint:'more = finer'},
+      {k:'mode',  t:'choice', label:'if it is a picture', v:'line art',
+       opts:['line art','silhouette'],
+       hint:'every stroke, or just the outer outline'}
+    ]},
+  text: {
+    label:'text  —  letters',
+    desc:'Any letter or word, drawn in a font and traced.\n'+
+         'Each letter and hole is its own loop, so expect connector lines\n'+
+         'between them — same as line art.',
+    fields:[
+      {k:'text',   t:'str', label:'text', v:'π', hint:'a letter, a word, a symbol'},
+      {k:'font',   t:'str', label:'font', v:'sans-serif',
+       hint:'sans-serif, serif, Impact, Georgia...'},
+      {k:'weight', t:'choice', label:'weight', v:'bold', opts:['normal','bold'],
+       hint:'bold traces more thickly'},
+      {k:'n',      t:'int', label:'points to sample', v:4000,
+       hint:'raise it for long words'}
+    ]},
+  shape: {
+    label:'shape  —  built-in formula',
+    desc:'A shape generated by maths — no file needed. Good for testing, and\n'+
+         'for seeing how many epicycles a given shape actually needs.',
+    fields:[{k:'shape', t:'shape', label:'which shape', v:'star'}]},
+  image: {
+    label:'image  —  line art / logo',
+    desc:'Traces EVERY line in a picture, including separate letters and the\n'+
+         'inside of outlined strokes. Straight connector lines will appear\n'+
+         'between the pieces — a Fourier series draws one continuous loop.',
+    fields:[
+      {k:'file',      t:'file', label:'image file'},
+      {k:'n',         t:'int',  label:'points to sample', v:4000, hint:'more = finer'},
+      {k:'invert',    t:'bool', label:'shape is light on dark', v:false},
+      {k:'minLen',    t:'int',  label:'ignore pieces smaller than', v:25,
+       hint:'raise it to drop speckle and jpg noise'},
+      {k:'maxShapes', t:'int',  label:'max separate pieces', v:40}
+    ]},
+  silhouette: {
+    label:'silhouette  —  one solid shape',
+    desc:'Traces a single outline: the edge of the biggest solid blob.\n'+
+         'Use it for filled shapes. Internal detail is ignored — switch to\n'+
+         '"image" if you lose lines.',
+    fields:[
+      {k:'file',   t:'file', label:'image file'},
+      {k:'n',      t:'int',  label:'points to sample', v:2500, hint:'more = finer'},
+      {k:'invert', t:'bool', label:'shape is light on dark', v:false}
+    ]},
+  svg: {
+    label:'svg  —  vector file',
+    desc:'Reads the real curves out of an .svg, so there are no pixels and no\n'+
+         'jagged edges. The best option if you have one.',
+    fields:[
+      {k:'file', t:'file', label:'svg file'},
+      {k:'n',    t:'int',  label:'points to sample', v:3000, hint:'more = finer'},
+      {k:'longestOnly', t:'bool', label:'longest path only', v:false,
+       hint:'off = every path, chained together'}
+    ]},
+  csv: {
+    label:'csv  —  points you saved',
+    desc:'A file of x,y numbers, one point per line.\n'+
+         'Anything you save from the sketcher lands here.',
+    fields:[{k:'file', t:'file', label:'csv file'}]},
+  draw: {
+    label:'draw  —  with the mouse',
+    desc:'Sketch it yourself: drag on the canvas, then press Done.\n'+
+         'Whatever you draw is closed into a loop automatically.',
+    fields:[]}
+};
+
+const $ = s => document.querySelector(s);
+const state = {file:null, fileName:'', values:{}, shapeParams:{}};
+
+function field(f, host, source){
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<label>${f.label}</label>`;
+  const cell = document.createElement('span');
+  let input;
+  if (f.t === 'bool'){
+    input = document.createElement('input'); input.type = 'checkbox';
+    input.checked = !!f.v;
+    input.onchange = () => state.values[f.k] = input.checked;
+    state.values[f.k] = !!f.v;
+  } else if (f.t === 'choice' || f.t === 'shape'){
+    input = document.createElement('select');
+    const opts = f.t === 'shape' ? Object.keys(SHAPES) : f.opts;
+    opts.forEach(o => input.add(new Option(o, o)));
+    input.value = f.v;
+    state.values[f.k] = f.v;
+    input.onchange = () => {
+      state.values[f.k] = input.value;
+      if (f.t === 'shape') shapeParams(input.value);
+    };
+  } else if (f.t === 'file'){
+    input = document.createElement('button');
+    input.textContent = 'choose a file...';
+    input.onclick = () => $('#fileInput').click();
+  } else {
+    input = document.createElement('input');
+    input.type = f.t === 'int' ? 'number' : 'text';
+    input.value = f.v;
+    input.style.width = '100%';
+    state.values[f.k] = f.v;
+    input.oninput = () =>
+      state.values[f.k] = f.t === 'int' ? +input.value : input.value;
+  }
+  cell.appendChild(input);
+  row.appendChild(cell);
+  const hint = document.createElement('span');
+  hint.className = 'hint';
+  hint.textContent = f.hint || (f.t === 'file' ? (state.fileName || 'or drop one on the page') : '');
+  if (f.t === 'file') hint.id = 'fileHint';
+  row.appendChild(hint);
+  host.appendChild(row);
+}
+
+function shapeParams(name){
+  const old = $('#shapeParams');
+  if (old) old.remove();
+  const box = document.createElement('div');
+  box.id = 'shapeParams';
+  box.style.marginTop = '10px';
+  state.shapeParams = {};
+  const defs = SHAPES[name];
+  if (!Object.keys(defs).length){
+    box.innerHTML = '<span class="hint">this one has no settings</span>';
+  } else {
+    for (const [k, v] of Object.entries(defs)){
+      state.shapeParams[k] = v;
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<label>${k}</label>`;
+      const cell = document.createElement('span');
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.value = v; inp.style.width = '100%';
+      inp.step = Number.isInteger(v) ? 1 : 0.1;
+      inp.oninput = () => state.shapeParams[k] = +inp.value;
+      cell.appendChild(inp); row.appendChild(cell);
+      const hint = document.createElement('span');
+      hint.className = 'hint';
+      hint.textContent = `${helpFor(name, k)}   (default ${v})`;
+      row.appendChild(hint);
+      box.appendChild(row);
+    }
+  }
+  $('#params').appendChild(box);
+}
+
+function buildSource(){
+  const key = $('#source').value;
+  const src = SOURCES[key];
+  $('#desc').textContent = src.desc;
+  $('#params').innerHTML = '';
+  state.values = {};
+  src.fields.forEach(f => field(f, $('#params'), key));
+  if (key === 'shape') shapeParams(state.values.shape || 'star');
+  if (key === 'draw')
+    $('#params').innerHTML = '<span class="hint">press Draw to open the sketch pad</span>';
+  $('#err').textContent = '';
+}
+
+Object.entries(SOURCES).forEach(([k, v]) => $('#source').add(new Option(v.label, k)));
+$('#source').onchange = buildSource;
+buildSource();
+
+// ---- file handling: input, click, drag and drop ----
+function takeFile(file){
+  if (!file) return;
+  state.file = file;
+  state.fileName = file.name;
+  $('#fileName').textContent = 'loaded: ' + file.name;
+  const hint = $('#fileHint');
+  if (hint) hint.textContent = file.name;
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  const cur = $('#source').value;
+  const fileSources = ['file','image','silhouette','svg','csv'];
+  if (!fileSources.includes(cur)){        // dropped while on shape/text/draw
+    $('#source').value = 'file';
+    buildSource();
+    const h = $('#fileHint'); if (h) h.textContent = file.name;
+  }
+}
+$('#fileInput').onchange = e => takeFile(e.target.files[0]);
+$('#zone').onclick = () => $('#fileInput').click();
+['dragenter','dragover'].forEach(ev =>
+  document.addEventListener(ev, e => {
+    e.preventDefault(); $('#zone').classList.add('hot');
+  }));
+['dragleave','drop'].forEach(ev =>
+  document.addEventListener(ev, e => {
+    e.preventDefault();
+    if (ev === 'drop' || e.target === document.documentElement)
+      $('#zone').classList.remove('hot');
+  }));
+document.addEventListener('drop', e => takeFile(e.dataTransfer.files[0]));
+
+// ==========================================================
+// GETTING THE POINTS  (one entry point, like get_points)
+// ==========================================================
+function readFile(file, as){
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(new Error('could not read ' + file.name));
+    as === 'text' ? r.readAsText(file) : r.readAsDataURL(file);
+  });
+}
+
+function loadImage(url){
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error('that file is not an image the browser can read'));
+    img.src = url;
+  });
+}
+
+async function getPoints(){
+  const key = $('#source').value, v = state.values;
+
+  if (key === 'shape') return makeShape(v.shape, state.shapeParams);
+  if (key === 'text')  return pointsFromText(v.text || 'π',
+                          {font:v.font, weight:v.weight, n:+v.n || 3000});
+  if (key === 'draw')  return sketch();
+
+  if (!state.file) throw new Error('choose a file first — drop one on the page');
+  const ext = (state.file.name.split('.').pop() || '').toLowerCase();
+  const n = +v.n || 3000;
+
+  if (key === 'csv' || (key === 'file' && ['csv','txt'].includes(ext)))
+    return pointsFromCsv(await readFile(state.file, 'text'));
+
+  if (key === 'svg' || (key === 'file' && ext === 'svg'))
+    return pointsFromSvg(await readFile(state.file, 'text'),
+                         {n, longestOnly:!!v.longestOnly});
+
+  const img = await loadImage(await readFile(state.file, 'url'));
+  const lineArt = key === 'image' || (key === 'file' && v.mode !== 'silhouette');
+  return pointsFromImage(img, {lineArt, n, invert:!!v.invert,
+                               minLen:+v.minLen || 25,
+                               maxShapes:+v.maxShapes || 40});
+}
+
+// ---- the mouse sketch pad ----
+function sketch(){
+  return new Promise(resolve => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;inset:0;background:#0c0c0c;z-index:20;'+
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px';
+    wrap.innerHTML = '<div class="hint">drag to draw, then press Done</div>';
+    const cv = document.createElement('canvas');
+    cv.width = 620; cv.height = 620;
+    cv.style.cssText = 'background:#141414;border:1px solid #2a2a2a;border-radius:8px;'+
+                       'width:620px;height:620px;cursor:crosshair';
+    const bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;gap:8px';
+    bar.innerHTML = '<button id="skUndo">Undo</button>'+
+                    '<button id="skClear">Clear</button>'+
+                    '<button id="skDone" style="background:#1d4f6b">Done</button>';
+    wrap.append(cv, bar);
+    document.body.appendChild(wrap);
+
+    const cx = cv.getContext('2d');
+    let pts = [], marks = [], drawing = false;
+
+    const paint = () => {
+      cx.clearRect(0, 0, cv.width, cv.height);
+      cx.strokeStyle = '#4dc3ff'; cx.lineWidth = 2;
+      cx.beginPath();
+      pts.forEach((p, i) => i ? cx.lineTo(p[0], p[1]) : cx.moveTo(p[0], p[1]));
+      cx.stroke();
+      if (pts.length > 2){                       // the closing edge
+        cx.strokeStyle = '#555'; cx.setLineDash([5, 4]);
+        cx.beginPath();
+        cx.moveTo(pts[pts.length-1][0], pts[pts.length-1][1]);
+        cx.lineTo(pts[0][0], pts[0][1]); cx.stroke(); cx.setLineDash([]);
+      }
+      wrap.firstChild.textContent = `drag to draw, then press Done   —   ${pts.length} points`;
+    };
+    const at = e => {
+      const r = cv.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    };
+    cv.onpointerdown = e => { drawing = true; marks.push(pts.length);
+                              pts.push(at(e)); paint(); cv.setPointerCapture(e.pointerId); };
+    cv.onpointermove = e => { if (drawing){ pts.push(at(e)); paint(); } };
+    cv.onpointerup   = () => drawing = false;
+    bar.querySelector('#skUndo').onclick  = () => { if (marks.length) pts.length = marks.pop(); paint(); };
+    bar.querySelector('#skClear').onclick = () => { pts = []; marks = []; paint(); };
+    bar.querySelector('#skDone').onclick  = () => {
+      wrap.remove();
+      if (pts.length < 3) return resolve(makeShape('star', SHAPES.star));
+      resolve(normalise(pts.map(p => [p[0], -p[1]])));
+    };
+    paint();
+  });
+}
+
+// ==========================================================
+// THE ANIMATION
+// ==========================================================
+const N_FRAMES = 600, TRACE_DETAIL = 8, SPEEDS = [1, 2, 4, 8];
+const run = {terms:[], shape:[], k:0, step:2, n:8, paused:false, trace:[],
+             guide:false, big:false, waves:null, colour:'#ff2d2d',
+             looping:false, view:'setup'};   // one animation loop per session
+
+const mainCv = $('#draw2d'), waveCv = $('#waves');
+const mainCx = mainCv.getContext('2d'), waveCx = waveCv.getContext('2d');
+
+function fitCanvas(cv, cx){
+  const dpr = window.devicePixelRatio || 1;
+  const r = cv.getBoundingClientRect();
+  cv.width = Math.max(1, r.width * dpr); cv.height = Math.max(1, r.height * dpr);
+  cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return {w:r.width, h:r.height};
+}
+
+function start(points){
+  const N = +$('#nSamples').value;
+  run.shape = center(resample(points, N));
+  run.terms = fourier(run.shape, +$('#maxArms').value);
+  run.colour = $('#penColour').value;
+  run.step = +$('#speed').value;
+  run.n = Math.min(+$('#startArms').value, run.terms.length);
+  run.k = 0; run.trace = []; run.paused = false; run.waves = null;
+
+  let max = 0;
+  for (const p of run.shape) max = Math.max(max, Math.hypot(p[0], p[1]));
+  run.margin = (max || 10) * 1.35;
+
+  const s = $('#arms');
+  s.max = run.terms.length; s.value = run.n; $('#armsVal').textContent = run.n;
+
+  go('draw');
+  document.querySelectorAll('#speeds button').forEach(b =>
+    b.classList.toggle('on', +b.dataset.sp === run.step));
+  $('#bPause').textContent = 'Pause';
+  $('#bPause').classList.remove('on');
+  if (!run.looping){                 // pressing Draw again must NOT stack loops
+    run.looping = true;              // -- that used to multiply the speed
+    requestAnimationFrame(frame);
+  }
+}
+
+function penAt(t, n){                       // sum the first n arms at time t
+  let x = 0, y = 0;
+  for (let i = 0; i < n; i++){
+    const a = run.terms[i], ang = 2*Math.PI*a.freq*t + a.phase;
+    x += a.amp * Math.cos(ang); y += a.amp * Math.sin(ang);
+  }
+  return [x, y];
+}
+
+function armChain(t, n){                    // every joint, for the circles
+  let x = 0, y = 0;
+  const pts = [[0, 0]];
+  for (let i = 0; i < n; i++){
+    const a = run.terms[i], ang = 2*Math.PI*a.freq*t + a.phase;
+    x += a.amp * Math.cos(ang); y += a.amp * Math.sin(ang);
+    pts.push([x, y]);
+  }
+  return pts;
+}
+
+function drawFrame(){
+  const {w, h} = fitCanvas(mainCv, mainCx);
+  const scale = Math.min(w, h) / (2 * run.margin);
+  const px = p => [w/2 + p[0]*scale, h/2 - p[1]*scale];
+
+  mainCx.clearRect(0, 0, w, h);
+  const t = run.k / N_FRAMES;
+  const joints = armChain(t, run.n);
+
+  if (run.guide){                                     // dashed target
+    mainCx.strokeStyle = '#3a3a3a'; mainCx.lineWidth = 1;
+    mainCx.setLineDash([5, 4]); mainCx.beginPath();
+    run.shape.forEach((p, i) => { const q = px(p);
+      i ? mainCx.lineTo(q[0], q[1]) : mainCx.moveTo(q[0], q[1]); });
+    mainCx.closePath(); mainCx.stroke(); mainCx.setLineDash([]);
+  }
+
+  mainCx.strokeStyle = 'rgba(255,255,255,.28)'; mainCx.lineWidth = 1;
+  for (let i = 0; i < run.n; i++){                    // the circles
+    const r = run.terms[i].amp * scale;
+    if (r < 1.2) continue;
+    const c = px(joints[i]);
+    mainCx.beginPath(); mainCx.arc(c[0], c[1], r, 0, 6.2832); mainCx.stroke();
+  }
+
+  mainCx.strokeStyle = 'rgba(255,255,255,.75)'; mainCx.lineWidth = 1.2;
+  mainCx.beginPath();                                 // the arms
+  joints.forEach((p, i) => { const q = px(p);
+    i ? mainCx.lineTo(q[0], q[1]) : mainCx.moveTo(q[0], q[1]); });
+  mainCx.stroke();
+
+  if (run.trace.length > 1){                          // the pen's path
+    mainCx.strokeStyle = run.colour; mainCx.lineWidth = 2;
+    mainCx.lineJoin = 'round'; mainCx.beginPath();
+    run.trace.forEach((p, i) => { const q = px(p);
+      i ? mainCx.lineTo(q[0], q[1]) : mainCx.moveTo(q[0], q[1]); });
+    mainCx.stroke();
+  }
+  $('#title').textContent =
+    `${run.n} of ${run.terms.length} epicycles   |   speed ${run.step}x` +
+    (run.paused ? '   |   paused' : '');
+}
+
+function buildWaves(){                      // recomputed only when n changes
+  const M = 800, x = new Float64Array(M), y = new Float64Array(M);
+  for (let i = 0; i < M; i++){
+    const p = penAt(i / M, run.n);
+    x[i] = p[0]; y[i] = p[1];
+  }
+  run.waves = {x, y};
+}
+
+function drawWaves(){
+  const {w, h} = fitCanvas(waveCv, waveCx);
+  if (!run.waves) buildWaves();
+  waveCx.clearRect(0, 0, w, h);
+  const pad = 34, ph = (h - pad) / 3;
+  const t = run.k / N_FRAMES;
+  const panels = [
+    {name:'x(t)',        data:run.waves.x, col:'#4dc3ff', span:run.margin},
+    {name:'y(t)',        data:run.waves.y, col:'#ffb347', span:run.margin},
+    {name:'x(t) + y(t)', data:null,        col:'#b48cff', span:run.margin*2}
+  ];
+  panels.forEach((p, idx) => {
+    const top = 8 + idx * ph, mid = top + ph/2 - 6;
+    waveCx.strokeStyle = '#222'; waveCx.lineWidth = 1;
+    waveCx.beginPath(); waveCx.moveTo(pad, mid); waveCx.lineTo(w-8, mid); waveCx.stroke();
+    waveCx.fillStyle = '#8b8b8b'; waveCx.font = '10px system-ui';
+    waveCx.fillText(p.name, 4, top + 12);
+
+    const M = run.waves.x.length, sy = (ph/2 - 14) / p.span;
+    waveCx.strokeStyle = p.col; waveCx.lineWidth = 1.6; waveCx.beginPath();
+    for (let i = 0; i < M; i++){
+      const v = p.data ? p.data[i] : run.waves.x[i] + run.waves.y[i];
+      const X = pad + (w - pad - 8) * i / M, Y = mid - v * sy;
+      i ? waveCx.lineTo(X, Y) : waveCx.moveTo(X, Y);
+    }
+    waveCx.stroke();
+
+    const X = pad + (w - pad - 8) * t;                 // time cursor
+    waveCx.strokeStyle = 'rgba(232,232,232,.35)'; waveCx.lineWidth = 1;
+    waveCx.beginPath(); waveCx.moveTo(X, top); waveCx.lineTo(X, top + ph - 8);
+    waveCx.stroke();
+    const pen = penAt(t, run.n);
+    const v = p.data ? (idx ? pen[1] : pen[0]) : pen[0] + pen[1];
+    waveCx.fillStyle = '#e8e8e8';
+    waveCx.beginPath(); waveCx.arc(X, mid - v * sy, 3, 0, 6.2832); waveCx.fill();
+  });
+  waveCx.fillStyle = '#8b8b8b'; waveCx.font = '10px system-ui';
+  waveCx.fillText('t  (one full lap)', w - 96, h - 4);
+}
+
+function frame(){
+  if (!run.paused){
+    const t0 = run.k / N_FRAMES;
+    for (let i = 0; i < TRACE_DETAIL; i++)          // smooth trace, any speed
+      run.trace.push(penAt(t0 + i * run.step / N_FRAMES / TRACE_DETAIL, run.n));
+    run.k = (run.k + run.step) % N_FRAMES;
+    const keep = Math.max(200, N_FRAMES * TRACE_DETAIL / run.step);
+    if (run.trace.length > keep) run.trace.splice(0, run.trace.length - keep);
+  }
+  if (run.view === 'setup'){ requestAnimationFrame(frame); return; }
+  if (cam.open) draw3d();
+  else { drawFrame(); if (!run.big) drawWaves(); }
+  requestAnimationFrame(frame);
+}
+
+// ==========================================================
+// 3D VIEW — the space curve (t, x, y) whose shadows are the
+// drawing and the two waveforms
+// ==========================================================
+const cv3d = $('#cv3d'), cx3d = cv3d.getContext('2d');
+const cam = {yaw:-0.9, pitch:0.5, open:false};
+
+function project(p, w, h){                 // orthographic, yaw then pitch
+  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  const x =  p[0]*cy + p[1]*sy;
+  const z = -p[0]*sy + p[1]*cy;
+  const y =  p[2]*cp - z*sp;
+  const s = Math.min(w, h) * 0.34;
+  return [w/2 + x*s, h/2 - y*s];
+}
+
+function draw3d(){
+  if (!cam.open) return;
+  const dpr = window.devicePixelRatio || 1;
+  const r = cv3d.getBoundingClientRect();
+  cv3d.width = r.width*dpr; cv3d.height = r.height*dpr;
+  cx3d.setTransform(dpr,0,0,dpr,0,0);
+  const w = r.width, h = r.height;
+  cx3d.clearRect(0,0,w,h);
+
+  const M = 700, m = run.margin;
+  const path = [], flat = [], onX = [], onY = [];
+  for (let i = 0; i <= M; i++){
+    const t = i / M, p = penAt(t, run.n);
+    const T = t*2 - 1, X = p[0]/m, Y = p[1]/m;     // all into -1..1
+    path.push([T, X, Y]);
+    flat.push([-1, X, Y]);                          // the drawing, at t=0
+    onX.push([T, X, -1]);                           // x(t) on the floor
+    onY.push([T, 1, Y]);                            // y(t) on the far wall
+  }
+
+  const line = (pts, col, width) => {
+    cx3d.strokeStyle = col; cx3d.lineWidth = width; cx3d.beginPath();
+    pts.forEach((p, i) => { const q = project(p, w, h);
+      i ? cx3d.lineTo(q[0], q[1]) : cx3d.moveTo(q[0], q[1]); });
+    cx3d.stroke();
+  };
+
+  cx3d.strokeStyle = '#242424'; cx3d.lineWidth = 1;      // the box
+  const corners = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],
+                   [-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
+  [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],
+   [0,4],[1,5],[2,6],[3,7]].forEach(([a,b]) => {
+    const p = project(corners[a], w, h), q = project(corners[b], w, h);
+    cx3d.beginPath(); cx3d.moveTo(p[0],p[1]); cx3d.lineTo(q[0],q[1]); cx3d.stroke();
+  });
+
+  line(onX, 'rgba(77,195,255,.55)', 1);
+  line(onY, 'rgba(255,179,71,.55)', 1);
+  line(flat, 'rgba(255,255,255,.65)', 1.2);
+  line(path, run.colour, 1.8);
+
+  const t = run.k / N_FRAMES, pen = penAt(t, run.n);     // where the pen is now
+  const now = project([t*2-1, pen[0]/m, pen[1]/m], w, h);
+  cx3d.fillStyle = '#fff';
+  cx3d.beginPath(); cx3d.arc(now[0], now[1], 4, 0, 6.2832); cx3d.fill();
+
+  cx3d.fillStyle = '#8b8b8b'; cx3d.font = '11px system-ui';
+  const lab = (p, s) => { const q = project(p, w, h); cx3d.fillText(s, q[0], q[1]); };
+  lab([1.15,-1,-1], 't');  lab([-1,1.15,-1], 'x(t)');  lab([-1,-1,1.15], 'y(t)');
+  cx3d.fillStyle = '#6b6b6b';
+  cx3d.fillText(run.n + ' epicycles', 14, h - 14);
+}
+
+let drag = null;
+cv3d.addEventListener('pointerdown', e => {
+  drag = [e.clientX, e.clientY]; cv3d.setPointerCapture(e.pointerId);
+});
+cv3d.addEventListener('pointermove', e => {
+  if (!drag) return;
+  cam.yaw   += (e.clientX - drag[0]) * 0.01;
+  cam.pitch += (e.clientY - drag[1]) * 0.01;
+  cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch));
+  drag = [e.clientX, e.clientY];
+});
+cv3d.addEventListener('pointerup', () => drag = null);
+
+// ==========================================================
+// ROUTING — one page, four history entries, so the browser's
+// back button steps back through the app instead of leaving it
+// ==========================================================
+const VIEWS = ['setup', 'draw', 'big', '3d'];
+
+function currentView(){
+  const v = (location.hash || '').replace(/^#\/?/, '');
+  return VIEWS.includes(v) ? v : 'setup';
+}
+
+function applyView(v){
+  if (v !== 'setup' && !run.terms.length) v = 'setup';   // nothing drawn yet
+  $('#setup').style.display = v === 'setup' ? 'flex' : 'none';
+  $('#app').style.display   = v === 'setup' ? 'none' : 'grid';
+  $('#view3d').style.display = v === '3d' ? 'block' : 'none';
+  cam.open = v === '3d';
+  run.big  = v === 'big';
+  $('#stage').classList.toggle('big', run.big);
+  $('#bBig').classList.toggle('on', run.big);
+  $('#b3d').classList.toggle('on', cam.open);
+  document.title = v === 'setup' ? 'Fourier drawing'
+                                 : 'Fourier drawing — ' + v;
+  run.view = v;
+}
+
+function go(v){                       // adds a history entry
+  if (currentView() === v) applyView(v);
+  else location.hash = '#/' + v;
+}
+
+addEventListener('hashchange', () => {
+  const v = currentView();
+  if (v !== 'setup' && !run.terms.length){    // deep link with nothing loaded
+    location.replace('#/setup');
+    return;
+  }
+  applyView(v);
+});
+
+// ==========================================================
+// CONTROLS
+// ==========================================================
+SPEEDS.forEach(sp => {
+  const b = document.createElement('button');
+  b.textContent = sp + 'x'; b.dataset.sp = sp;
+  b.onclick = () => {
+    run.step = sp;
+    document.querySelectorAll('#speeds button').forEach(o =>
+      o.classList.toggle('on', o === b));
+  };
+  $('#speeds').appendChild(b);
+});
+
+$('#arms').oninput = e => {
+  run.n = +e.target.value;                 // no reset, no pause: the pen keeps
+  $('#armsVal').textContent = run.n;       // going and the old detail scrolls off
+  run.waves = null;
+};
+const toggleGuide = () => { run.guide = !run.guide; $('#bGuide').classList.toggle('on', run.guide); };
+const togglePause = () => {
+  run.paused = !run.paused;
+  $('#bPause').textContent = run.paused ? 'Play' : 'Pause';
+  $('#bPause').classList.toggle('on', run.paused);
+};
+const toggleBig = () => go(run.big ? 'draw' : 'big');
+$('#bGuide').onclick = toggleGuide;
+$('#bPause').onclick = togglePause;
+$('#bClear').onclick = () => run.trace = [];
+$('#bBig').onclick   = toggleBig;
+const toggle3d = () => go(cam.open ? 'draw' : '3d');
+$('#b3d').onclick     = toggle3d;
+$('#close3d').onclick = () => history.back();
+$('#bSave').onclick  = () => {
+  const link = document.createElement('a');
+  const out = document.createElement('canvas');
+  out.width = mainCv.width; out.height = mainCv.height;
+  const cx = out.getContext('2d');
+  cx.fillStyle = '#000'; cx.fillRect(0, 0, out.width, out.height);
+  cx.drawImage(mainCv, 0, 0);
+  link.download = 'fourier-' + Date.now() + '.png';
+  link.href = out.toDataURL();
+  link.click();
+};
+$('#bSetup').onclick = () => go('setup');
+
+addEventListener('keydown', e => {
+  if ($('#app').style.display === 'none') return;
+  if (e.key === ' '){ e.preventDefault(); togglePause(); }
+  else if (e.key === 'h') toggleGuide();
+  else if (e.key === 'c') run.trace = [];
+  else if (e.key === 'b') toggleBig();
+  else if (e.key === '3') toggle3d();
+  else if (e.key === 'Escape' && cam.open) history.back();
+});
+
+$('#draw').onclick = async () => {
+  const btn = $('#draw');
+  btn.disabled = true; btn.textContent = 'working...';
+  $('#err').textContent = '';
+  try {
+    const points = await getPoints();
+    if (!points || points.length < 3) throw new Error('that gave fewer than 3 points');
+    start(points);
+  } catch (err) {
+    $('#err').textContent = err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Draw';
+  }
+};
+addEventListener('keydown', e => {
+  if (e.key === 'Enter' && currentView() === 'setup') $('#draw').click();
+});
+
+if (currentView() !== 'setup') location.replace('#/setup');   // fresh load
+applyView('setup');
+</script>
+</body>
+</html>
