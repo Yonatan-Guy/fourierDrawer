@@ -298,5 +298,9 @@ addEventListener('keydown', e => {
   if (e.key === 'Enter' && currentView() === 'setup') $('#draw').click();
 });
 
+// Clicking Fourier's portrait is a shortcut for the old "Fourier himself" tile:
+// pick that source and start drawing in one step.
+$('#fourierPortrait').onclick = () => { showKind('fourier'); $('#draw').click(); };
+
 if (currentView() !== 'setup') location.replace('#/setup');   // fresh load
 applyView('setup');
