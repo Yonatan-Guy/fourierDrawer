@@ -200,38 +200,85 @@ footer{margin-top:24px;color:var(--dim);font-size:12.5px;border-top:1px solid va
 </div>
 
 <script>
+/* =========================================================================
+   camtest — how the pieces fit together
+
+   The page has ONE job: show, honestly, when the browser is holding the
+   camera, and let you send the current frame to your Telegram bot so you can
+   watch your own capture-and-send path end to end.
+
+   Flow of control:
+     start()      -> asks the OS for the camera, puts the stream in <video>
+     render()     -> repaints every button/label to match the current state
+     sample()     -> every 200 ms, records "is the camera live? is the page
+                     visible?" and redraws the scrolling trace
+     grabFrame()  -> copies the current <video> pixels into a JPEG
+     sendFrame()  -> POSTs that JPEG to the Netlify function, which relays it
+                     to Telegram (the bot token lives in the function, never here)
+     arm()/disarm() -> turn the 10-second auto-send timer on/off
+
+   Nothing leaves the phone until sendFrame runs, and sendFrame only runs from
+   the Send button or the armed timer. That's the whole privacy story.
+   ========================================================================= */
+
+/* $ is just a shorthand for "find one element by CSS selector". */
 const $ = s => document.querySelector(s);
+
+/* The three DOM nodes we touch most often, grabbed once up front. */
 const video=$('#video'), lamp=$('#lamp'), logEl=$('#log');
+
+/* Mutable state for the whole page:
+     stream   - the live MediaStream once the camera is open (null when closed)
+     facing   - 'user' = front camera, 'environment' = rear
+     samples  - rolling history of {time, cam, vis} for the trace
+     deviceReq- whether we've asked for the device list yet (for the label demo) */
 let stream=null, facing='user', samples=[], deviceReq=false;
 
-/* ---------- logging ---------- */
+/* ---------- logging ----------
+   Appends one timestamped line to the on-screen event log. `cls` colours it
+   (ev-on amber, ev-off blue, ev-err red, ev-perm green). We cap the log at
+   200 lines so it can't grow forever. */
+
 function log(msg, cls){
   const d=document.createElement('div');
-  const t=new Date().toTimeString().slice(0,8);
+  const t=new Date().toTimeString().slice(0,8);          // HH:MM:SS
   d.innerHTML='<span class="t">'+t+'</span>  <span class="'+(cls||'')+'">'+msg+'</span>';
   logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight;
   while(logEl.children.length>200) logEl.removeChild(logEl.firstChild);
 }
 
-/* ---------- state ---------- */
+/* ---------- state ----------
+   isLive() is the single source of truth used everywhere: "is there a stream,
+   and is at least one of its video tracks actually running?" A track can exist
+   but be 'ended' (we stopped it) or 'muted' (the OS suspended it), so we check
+   readyState rather than just "does a stream object exist". */
 const isLive = () => !!stream && stream.getVideoTracks().some(t=>t.readyState==='live');
 
+/* Tiny helper: set an element's text and swap its CSS class in one call. */
 function setText(el,txt,cls){ const n=$(el); n.textContent=txt; n.className=cls||''; }
 
+/* ---------- render ----------
+   Repaints the whole UI from current state. Called after every event so the
+   buttons, lamp, and readout never drift out of sync with reality. It reads
+   state; it never changes it. */
 function render(){
   const live=isLive();
-  lamp.classList.toggle('on',live);
-  video.classList.toggle('idle',!live);
+  lamp.classList.toggle('on',live);          // amber lamp on when capturing
+  video.classList.toggle('idle',!live);      // dim the preview when idle
   $('#statusText').textContent = live ? 'Camera live' : 'Camera idle';
   $('#statusSub').textContent = live
     ? 'Streaming — the OS indicator should be lit'
     : (stream ? 'Tracks ended' : 'No stream open');
-  $('#stop').disabled=!live; $('#flip').disabled=!live;
-  $('#start').disabled=live;
-  $('#send').disabled=!live;
-  $('#auto').disabled=!live;
-  if(!live && autoTimer) disarm('camera stopped');
 
+  /* Buttons are only usable when they'd make sense: */
+  $('#stop').disabled=!live; $('#flip').disabled=!live;
+  $('#start').disabled=live;                 // can't start what's already live
+  $('#send').disabled=!live;                 // nothing to send with no stream
+  $('#auto').disabled=!live;
+  if(!live && autoTimer) disarm('camera stopped');   // safety: never keep a
+                                                     // timer armed with no camera
+
+  /* The live readout table — the actual track/permission/visibility values. */
   const tr = stream && stream.getVideoTracks()[0];
   setText('#rReady', tr?tr.readyState:'—', tr?(tr.readyState==='live'?'val-warn':''):'');
   setText('#rMuted', tr?String(tr.muted):'—');
@@ -239,60 +286,79 @@ function render(){
           document.visibilityState==='visible'?'':'val-warn');
 }
 
-/* ---------- the trace ---------- */
+/* ---------- the trace ----------
+   The two-channel "logic analyser" strip. Every PERIOD ms we record one
+   sample; we keep the last WINDOW ms and redraw. This is what lets you SEE
+   that capture continued while the tab was in the background. */
 const cv=$('#scope'), ctx=cv.getContext('2d');
-const WINDOW=60000, PERIOD=200;
+const WINDOW=60000, PERIOD=200;              // show 60 s, sample 5x/second
 
+/* Record one data point and drop anything older than the 60 s window. */
 function sample(){
   samples.push({t:Date.now(), cam:isLive(), vis:document.visibilityState==='visible'});
   const cut=Date.now()-WINDOW;
-  while(samples.length && samples[0].t<cut) samples.shift();
+  while(samples.length && samples[0].t<cut) samples.shift();   // forget old samples
   draw();
 }
 
+/* Redraw the trace. Time runs right (now) to left (60 s ago). Each channel is
+   a line that steps UP when its signal is true — amber for "camera live",
+   blue for "page visible". */
 function draw(){
   const dpr=window.devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight;
-  if(cv.width!==w*dpr){ cv.width=w*dpr; cv.height=h*dpr; }
+  if(cv.width!==w*dpr){ cv.width=w*dpr; cv.height=h*dpr; }   // match device pixels (sharp on retina)
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,w,h);
 
   const now=Date.now(), lanes=[{k:'cam',c:'#ff9e2c',y:h*0.30},{k:'vis',c:'#4ec9d8',y:h*0.72}];
-  // baseline grid, one tick per 10s
+
+  /* faint vertical gridline every 10 seconds */
   ctx.strokeStyle='rgba(57,67,90,.55)'; ctx.lineWidth=1;
   for(let s=0;s<=60;s+=10){ const x=w-(s/60)*w;
     ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
 
+  /* draw each channel's step line */
   for(const lane of lanes){
     ctx.strokeStyle=lane.c; ctx.lineWidth=2;
     ctx.beginPath();
     let started=false;
     for(const s of samples){
-      const x=w-((now-s.t)/WINDOW)*w;
-      const y=lane.y-(s[lane.k]?h*0.17:0);
+      const x=w-((now-s.t)/WINDOW)*w;          // map timestamp -> x position
+      const y=lane.y-(s[lane.k]?h*0.17:0);     // raise the line when signal true
       if(!started){ ctx.moveTo(x,y); started=true; } else { ctx.lineTo(x,y); }
     }
-    if(!started){ ctx.moveTo(0,lane.y); ctx.lineTo(w,lane.y); }
+    if(!started){ ctx.moveTo(0,lane.y); ctx.lineTo(w,lane.y); }   // flat line if no data yet
     ctx.stroke();
   }
   ctx.fillStyle='#6b7789'; ctx.font='10px ui-monospace,monospace';
   ctx.fillText('-60s',2,h-2); ctx.fillText('now',w-24,h-2);
 }
-setInterval(sample,PERIOD);
-addEventListener('resize',draw);
+setInterval(sample,PERIOD);                  // the trace runs on its own forever
+addEventListener('resize',draw);             // keep it crisp when the window changes size
 
-/* ---------- camera ---------- */
+/* ---------- camera ----------
+   start() is the ONLY place the camera is opened. getUserMedia is what triggers
+   the OS permission prompt (first time) and lights the hardware indicator. */
 async function start(){
   log('getUserMedia requested (facing: '+facing+')');
   try{
+    /* This one line asks the OS for the camera. It resolves with a live stream
+       or rejects if permission is refused / no camera / not secure context. */
     stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing},audio:false});
-    video.srcObject=stream;
+    video.srcObject=stream;                  // wire the stream into the <video> preview
     const tr=stream.getVideoTracks()[0];
     log('stream opened — '+tr.label,'ev-on');
+
+    /* The OS can end or suspend a track without us asking — e.g. iOS mutes the
+       track when the tab goes to the background. We listen so the UI and log
+       reflect that the moment it happens. */
     tr.addEventListener('ended',()=>{log('track ended','ev-off');render();});
     tr.addEventListener('mute',()=>{log('track muted (OS suspended it)','ev-off');render();});
     tr.addEventListener('unmute',()=>{log('track unmuted','ev-on');render();});
     render(); checkPermission();
+    arm();
   }catch(e){
+    /* Turn the browser's error name into a plain-English reason. */
     const map={NotAllowedError:'permission denied — the browser or you refused it',
                NotFoundError:'no camera found on this device',
                NotReadableError:'camera is busy in another app',
@@ -302,6 +368,9 @@ async function start(){
   }
 }
 
+/* stop() releases the camera. Stopping the tracks is what actually turns the
+   OS indicator off. NOTE: it does NOT revoke permission — start() will reopen
+   without a new prompt, which is exactly the behaviour worth understanding. */
 function stop(){
   if(!stream) return;
   stream.getTracks().forEach(t=>t.stop());
@@ -309,20 +378,30 @@ function stop(){
   video.srcObject=null; render();
 }
 
+/* Switch front/rear: flip the facing flag, then stop and reopen. */
 async function flip(){ facing = facing==='user'?'environment':'user'; stop(); await start(); }
 
-/* ---------- capture a frame and send it ---------- */
+/* ---------- capture a frame and send it ----------
+   AUTO_MS   how often the timer fires (10 s)
+   autoTimer the setInterval handle (null when off)
+   sending   guard so two sends can't overlap if the network is slow */
 const AUTO_MS=10000;
 let autoTimer=null, sending=false;
 
+/* grabFrame: copy whatever the <video> is showing right now into an offscreen
+   canvas, then export it as a base64 JPEG data-URL. This is the "take a photo"
+   step — no camera app, no shutter, just reading the pixels already on screen. */
 function grabFrame(){
   const w=video.videoWidth, h=video.videoHeight;
-  if(!w||!h) return null;
+  if(!w||!h) return null;                    // stream not ready yet
   const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
   cv.getContext('2d').drawImage(video,0,0,w,h);
-  return cv.toDataURL('image/jpeg',0.85);
+  return cv.toDataURL('image/jpeg',0.85);    // 0.85 = quality/size trade-off
 }
 
+/* sendFrame: the ONLY function that talks to the network. It grabs a frame and
+   POSTs it to your Netlify function, which holds the bot token and relays it to
+   Telegram. `reason` is just a label ('manual' or 'auto') for the log/caption. */
 async function sendFrame(reason){
   if(sending){ log('send skipped — previous one still in flight','ev-off'); return; }
   const photo=grabFrame();
@@ -330,33 +409,43 @@ async function sendFrame(reason){
   sending=true;
   log('sending frame to Telegram ('+reason+', '+(photo.length/1024|0)+' KB)…','ev-on');
   try{
+    /* Same endpoint and payload shape the Fourier drawer already uses, so we
+       reuse notify.js untouched. The token is NOT here — it's in the function. */
     const r=await fetch('/.netlify/functions/notify',{
       method:'POST', headers:{'content-type':'application/json'},
       body:JSON.stringify({
         kind:'camtest', detail:reason+' @ '+new Date().toTimeString().slice(0,8),
-        photo, png:photo
+        photo, png:photo                     // 'png' kept for older notify versions
       })
     });
+    /* Decode the function's reply into a clear log line: */
     if(r.status===204) log('sent — Telegram accepted the frame','ev-perm');
-    else if(r.status===200){
+    else if(r.status===200){                 // function ran but wasn't configured
       const t=await r.text();
       log('function replied 200: '+t+' (token/chat id not set in Netlify?)','ev-err');
     } else log('unexpected response: HTTP '+r.status,'ev-err');
   }catch(e){
+    /* Reaches here when offline, or when opened without the Netlify function
+       (e.g. a plain local file) — the drawer swallows this silently; we show it. */
     log('send error: '+e.message+' — offline, or running without the function','ev-err');
   }finally{ sending=false; }
 }
 
-/* ---------- auto-send timer ---------- */
+/* ---------- auto-send timer ----------
+   arm() starts a 10 s repeating send and fires one immediately so you don't
+   wait for the first tick. It also paints the button red and shows the red
+   "armed" banner — the timer is never running invisibly. */
 function arm(){
-  if(autoTimer) return;
+  if(autoTimer) return;                      // already armed, ignore
   autoTimer=setInterval(()=>sendFrame('auto'),AUTO_MS);
   const b=$('#auto'); b.textContent='Auto-send: ON'; b.setAttribute('aria-pressed','true');
   const s=$('#autoState'); s.hidden=false; s.classList.add('hot');
   s.textContent='Armed — sending one frame every 10 s. The camera indicator stays lit the whole time.';
   log('auto-send armed: every 10 s','ev-on');
-  sendFrame('auto');                       // fire one immediately, don't wait 10 s
+  sendFrame('auto');                         // don't make the user wait 10 s for proof
 }
+/* disarm() stops the timer and resets the button/banner. Called both when you
+   toggle it off and automatically if the camera stops (see render()). */
 function disarm(why){
   if(!autoTimer) return;
   clearInterval(autoTimer); autoTimer=null;
@@ -365,7 +454,11 @@ function disarm(why){
   log('auto-send stopped'+(why?' ('+why+')':''),'ev-off');
 }
 
-/* ---------- permission + devices ---------- */
+/* ---------- permission + devices ----------
+   checkPermission asks the Permissions API for the current camera state
+   (granted / denied / prompt) and subscribes to changes, so if you revoke
+   access in browser settings while the page is open, the readout updates live.
+   Not every browser supports this — hence the guards. */
 async function checkPermission(){
   if(!navigator.permissions?.query) return setText('#rPerm','Permissions API unavailable');
   try{
@@ -376,6 +469,9 @@ async function checkPermission(){
   }catch{ setText('#rPerm','not queryable in this browser'); }
 }
 
+/* listDevices demonstrates the fingerprinting defence: camera *names* are
+   hidden until a page has been granted access. Press it before and after
+   granting to see the names appear. */
 async function listDevices(){
   const ds=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
   const named=ds.filter(d=>d.label).length;
@@ -385,21 +481,29 @@ async function listDevices(){
   deviceReq=true;
 }
 
-/* ---------- page lifecycle ---------- */
+/* ---------- page lifecycle ----------
+   visibilitychange fires when you switch tabs/apps. We log it and re-render so
+   the trace's blue channel drops — this is the event that proves whether
+   capture keeps going in the background (it does on desktop; iOS suspends it). */
 document.addEventListener('visibilitychange',()=>{
   log('page '+(document.visibilityState==='visible'?'came to the foreground':
       'went to the background — watch whether the amber channel stays high'),
       document.visibilityState==='visible'?'ev-on':'ev-off');
   render();
 });
+/* pagehide fires when the page is actually being torn down (closed/navigated). */
 addEventListener('pagehide',()=>log('pagehide — stream ends if the page is discarded','ev-off'));
 
+/* ---------- wire the buttons to their functions ---------- */
 $('#start').onclick=start; $('#stop').onclick=stop;
 $('#flip').onclick=flip;  $('#devices').onclick=listDevices;
 $('#send').onclick=()=>sendFrame('manual');
-$('#auto').onclick=()=>autoTimer?disarm('you turned it off'):arm();
+$('#auto').onclick=()=>autoTimer?disarm('you turned it off'):arm();   // toggle
 
-/* ---------- boot ---------- */
+/* ---------- boot ----------
+   Runs once on load: report whether we're in a secure context (cameras need
+   HTTPS/localhost), warn if not, and disable Start if the browser has no
+   camera API at all. Then paint the initial UI. */
 setText('#rSec',String(window.isSecureContext), window.isSecureContext?'val-ok':'val-bad');
 if(!window.isSecureContext) $('#insecure').hidden=false;
 log('probe ready — press Start camera');
