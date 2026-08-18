@@ -51,7 +51,6 @@ addEventListener('hashchange', () => {
 // ==========================================================
 // THEME  — dark by default, remembered between visits
 // ==========================================================
-const DEFAULT_PEN = {dark:'#39ff14', light:'#12912a'};
 
 function setTheme(name){
   document.documentElement.dataset.theme = name;
@@ -63,7 +62,7 @@ function setTheme(name){
   // unless the user picked a colour themselves, in which case leave it alone
   const pen = $('#penColour');
   if (!pen.dataset.chosen){
-    pen.value = DEFAULT_PEN[name];
+    pen.value = cssVar('--trace');
     run.colour = pen.value;
   }
   if (run.view === 'maths') drawMaths();
