@@ -7,8 +7,10 @@ mouse — and it decomposes the outline with a Fourier transform, then rebuilds 
 as a chain of spinning arms. Slide the epicycle count up and watch a rounded
 blob sharpen into the original.
 
-**[Live site](https://YOUR-SITE.netlify.app)** · no install, nothing uploaded,
-everything runs in your browser.
+**[Live site](https://yonasfourierdrawer.netlify.app)  <!-- TODO: real URL -->** · no install, no sign-up, the
+maths runs in your browser.
+
+
 
 ---
 
@@ -82,23 +84,16 @@ The browser's back button steps back through the views.
 
 ## Running it
 
-Open `index.html`. That's the whole thing — one self-contained file, no build
-step, no dependencies, no network requests. Files you load never leave your
-machine.
+Open `index.html` — no build step, no dependencies, no package manager. Plain
+HTML plus the scripts in `js/` and the stylesheet in `css/`, loaded straight
+from disk.
 
-## Also in this repo
+Opened this way there is no server and no network traffic at all: the notify
+call in `js/app.js` posts to a Netlify function that isn't there, fails, and is
+ignored. Files you load never leave your machine. To be certain, set `NOTIFY`
+to `false` at the top of that block.
 
-A Python version, which is where the project started: the same maths with
-matplotlib and tkinter instead of a canvas.
-
-```
-python main.py
-```
-
-Needs `numpy`, `matplotlib` and `pillow`. The two versions are independent
-implementations of the same algorithms — the web one is easier to use, the
-Python one is easier to poke at from a console.
 
 ## Licence
 
-MIT — do what you like with it.
+do what you like with it.
