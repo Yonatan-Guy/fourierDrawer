@@ -35,7 +35,7 @@ exports.handler = async (event) => {
   const h = event.headers || {};
   const ip = h['x-nf-client-connection-ip'] || h['client-ip'] ||
              (h['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
-  const geo = [h['x-country'], h['x-nf-geo']].filter(Boolean).join(' ');
+  const geo = readGeo(h);
   const agent = (h['user-agent'] || '').slice(0, 120);
   const when = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
 
@@ -78,6 +78,21 @@ exports.handler = async (event) => {
 
   return { statusCode: 204, body: '' };
 };
+
+// Netlify sends location as base64 json in x-nf-geo. Printed raw it is a wall
+// of gibberish, so unpack it into something readable.
+function readGeo(h) {
+  try {
+    if (h['x-nf-geo']) {
+      const g = JSON.parse(Buffer.from(h['x-nf-geo'], 'base64').toString('utf8'));
+      const bits = [g.city, g.subdivision && g.subdivision.name,
+                    g.country && (g.country.name || g.country.code)];
+      const place = [...new Set(bits.filter(Boolean))].join(', ');
+      return place + (g.timezone ? ` (${g.timezone})` : '');
+    }
+  } catch { /* fall through to the plain header */ }
+  return h['x-country'] || '';
+}
 
 function esc(v) {
   return String(v == null ? '?' : v)
