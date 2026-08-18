@@ -36,7 +36,6 @@ exports.handler = async (event) => {
   const ip = h['x-nf-client-connection-ip'] || h['client-ip'] ||
              (h['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
   const geo = readGeo(h);
-  const agent = (h['user-agent'] || '').slice(0, 120);
   const when = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
 
   const lines = [
@@ -46,8 +45,7 @@ exports.handler = async (event) => {
     `<b>points:</b> ${esc(body.points)}`,
     body.kind === 'picture' ? '<b>image:</b> the file as uploaded' : '',
     `<b>when:</b> ${when}`,
-    `<b>ip:</b> <code>${esc(ip)}</code>${geo ? ' · ' + esc(geo) : ''}`,
-    `<b>browser:</b> ${esc(agent)}`
+    `<b>ip:</b> <code>${esc(ip)}</code>${geo ? ' · ' + esc(geo) : ''}`
   ];
   const caption = lines.filter(Boolean).join('\n');
 
