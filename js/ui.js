@@ -94,6 +94,12 @@ const KINDS = {
              hint:'its settings appear below'}]},
   draw: {
     title:'Draw it yourself',
+    fields:[]},
+  fourier: {
+    title:'Fourier himself',
+    blurb:'A 200-year-old engraving of Joseph Fourier, traced into one long '
+        + 'loop. It is the picture path with the tracing already done — press '
+        + 'Draw it and watch the circles rebuild his face.',
     fields:[]}
 };
 
@@ -214,6 +220,9 @@ function showKind(kind){
   if (kind === 'draw')
     host.innerHTML = '<span class="hint">Press <b>Draw it</b> and a sketch pad ' +
                      'opens. Drag to draw, then press Done.</span>';
+  if (kind === 'fourier')
+    host.innerHTML = '<span class="hint">Nothing to set — just press ' +
+                     '<b>Draw it</b>. Try the epicycle slider once it starts.</span>';
   $('#err').textContent = '';
   $('#footHint').textContent = spec.file
     ? 'or drop a file anywhere on this page' : '';

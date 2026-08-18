@@ -1,5 +1,5 @@
-.idea/
-venv/
-__pycache__/
 *.pyc
-output/
+.idea/
+__pycache__/
+output/node_modules/
+venv/

@@ -32,6 +32,7 @@ async function getPoints(){
   if (kind === 'text')  return pointsFromText(v.text || 'π',
                           {font:v.font, weight:v.weight, n:+v.n || 3000});
   if (kind === 'draw')  return sketch();
+  if (kind === 'fourier') return pointsFromPreset('assets/fourier-points.json');
 
   if (!state.file) throw new Error('choose a picture first — or drop one on the page');
   const ext = (state.file.name.split('.').pop() || '').toLowerCase();
@@ -47,6 +48,25 @@ async function getPoints(){
   return pointsFromImage(img, {lineArt: v.mode !== 'just the outline',
                                n, invert: !!v.invert,
                                minLen: 25, maxShapes: 40});
+}
+
+// ---- a built-in preset: points shipped with the site ----
+// The file is a JSON array of [x,y] pairs, already traced, chained and
+// normalised to +-10 -- the same output pointsFromImage would give, saved so
+// the browser needn't re-trace an engraving every time. Fetched on demand, so
+// it costs nothing until the tile is used.
+async function pointsFromPreset(url){
+  let data;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    data = await res.json();
+  } catch (e) {
+    throw new Error('could not load the built-in drawing (' + e.message + ')');
+  }
+  if (!Array.isArray(data) || data.length < 3)
+    throw new Error('the built-in drawing looks empty');
+  return data.map(p => [+p[0], +p[1]]);
 }
 
 // ---- the mouse sketch pad ----
