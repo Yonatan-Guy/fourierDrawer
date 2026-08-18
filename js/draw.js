@@ -110,6 +110,7 @@ function drawFrame(){
   $('#title').textContent =
     `${run.n} of ${run.terms.length} epicycles   |   speed ${run.step}x` +
     (run.paused ? '   |   paused' : '');
+
 }
 
 function buildWaves(){                      // recomputed only when n changes

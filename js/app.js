@@ -118,7 +118,7 @@ $('#draw').onclick = async () => {
   } catch (err) {
     $('#err').textContent = err.message;
   } finally {
-    btn.disabled = false; btn.textContent = 'Draw';
+    btn.disabled = false; btn.textContent = 'Draw it';
   }
 };
 addEventListener('keydown', e => {

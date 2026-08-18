@@ -26,29 +26,27 @@ function loadImage(url){
 }
 
 async function getPoints(){
-  const key = $('#source').value, v = state.values;
+  const v = state.values, kind = state.kind;
 
-  if (key === 'shape') return makeShape(v.shape, state.shapeParams);
-  if (key === 'text')  return pointsFromText(v.text || 'π',
+  if (kind === 'shape') return makeShape(v.shape, state.shapeParams);
+  if (kind === 'text')  return pointsFromText(v.text || 'π',
                           {font:v.font, weight:v.weight, n:+v.n || 3000});
-  if (key === 'draw')  return sketch();
+  if (kind === 'draw')  return sketch();
 
-  if (!state.file) throw new Error('choose a file first — drop one on the page');
+  if (!state.file) throw new Error('choose a picture first — or drop one on the page');
   const ext = (state.file.name.split('.').pop() || '').toLowerCase();
   const n = +v.n || 3000;
 
-  if (key === 'csv' || (key === 'file' && ['csv','txt'].includes(ext)))
+  // the extension decides what to do with it, so nobody has to
+  if (['csv', 'txt'].includes(ext))
     return pointsFromCsv(await readFile(state.file, 'text'));
-
-  if (key === 'svg' || (key === 'file' && ext === 'svg'))
-    return pointsFromSvg(await readFile(state.file, 'text'),
-                         {n, longestOnly:!!v.longestOnly});
+  if (ext === 'svg')
+    return pointsFromSvg(await readFile(state.file, 'text'), {n});
 
   const img = await loadImage(await readFile(state.file, 'url'));
-  const lineArt = key === 'image' || (key === 'file' && v.mode !== 'silhouette');
-  return pointsFromImage(img, {lineArt, n, invert:!!v.invert,
-                               minLen:+v.minLen || 25,
-                               maxShapes:+v.maxShapes || 40});
+  return pointsFromImage(img, {lineArt: v.mode !== 'just the outline',
+                               n, invert: !!v.invert,
+                               minLen: 25, maxShapes: 40});
 }
 
 // ---- the mouse sketch pad ----
