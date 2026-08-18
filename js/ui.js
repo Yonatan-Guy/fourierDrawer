@@ -157,6 +157,9 @@ function showKind(kind){
     // stop applying -- the next shape works its own out again.
     $('#maxArms').removeAttribute('data-chosen');
     $('#startArms').removeAttribute('data-chosen');
+    $('#penColour').removeAttribute('data-chosen');
+    $('#penColour').value = getComputedStyle(document.documentElement)
+                              .getPropertyValue('--trace').trim();  // theme's pen
     return;
   }
 

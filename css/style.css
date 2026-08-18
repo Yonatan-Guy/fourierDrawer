@@ -225,3 +225,15 @@
   #skBar .cta{background:var(--go);border-color:var(--goEdge);
               color:var(--goText);font-weight:600}
   #skHint.warn{color:#ff7676;font-weight:600}
+
+  /* ---------- phones: keep every page clear of the floating theme button ----
+     These live at the end of the file on purpose: the base rules for #maths
+     and #hud3d appear after the main media query, so an override placed there
+     would lose to them. */
+  @media (max-width:760px){
+    #themeBtn{top:10px;left:10px;padding:5px 10px;font-size:11px}
+    #setup{padding-top:54px}
+    #maths{padding-top:54px}
+    #hud3d{top:54px}
+    #view3d #views3d{margin-left:0}
+  }
