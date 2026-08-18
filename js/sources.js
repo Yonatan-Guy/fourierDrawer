@@ -48,6 +48,20 @@ const SHAPE_HELP_BY = {
   spirograph:{r:'the small circle rolling inside'}
 };
 
+// What each parameter is allowed to be. Counts are whole numbers of at least
+// one; sizes are positive; depth is a fraction. Without this you can type -5
+// spikes or a radius of zero and get an empty drawing with no explanation.
+const SHAPE_RANGE = {
+  n:{min:50, max:20000, int:true},      r:{min:0.1, max:1000, int:false},
+  scale:{min:0.05, max:100, int:false}, sides:{min:3, max:200, int:true},
+  points:{min:2, max:200, int:true},    r_outer:{min:0.1, max:1000, int:false},
+  r_inner:{min:0.01, max:1000, int:false}, petals:{min:2, max:200, int:true},
+  depth:{min:0, max:1, int:false},      teeth:{min:2, max:400, int:true},
+  tooth:{min:0.01, max:100, int:false}, R:{min:0.1, max:1000, int:false},
+  d:{min:0, max:1000, int:false},       turns:{min:1, max:400, int:true}
+};
+const rangeFor = key => SHAPE_RANGE[key] || {min:0.01, max:100000, int:false};
+
 const labelFor = (shape, key) =>
   (SHAPE_LABEL_BY[shape] || {})[key] || SHAPE_LABEL[key] || key;
 const helpFor = (shape, key) =>

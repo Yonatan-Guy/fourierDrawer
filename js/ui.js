@@ -8,6 +8,47 @@
 // SETUP SCREEN
 // ==========================================================
 const $ = s => document.querySelector(s);
+
+// Whatever the markup says at load time IS the default. Snapshot it now so
+// Home can put everything back without the defaults being written down twice.
+const ADVANCED = ['#nSamples', '#maxArms', '#startArms', '#speed'];
+const DEFAULTS = {};
+addEventListener('DOMContentLoaded', () => {});          // (markup is already parsed)
+ADVANCED.forEach(sel => DEFAULTS[sel] = document.querySelector(sel).value);
+
+// Number inputs happily accept "+", "-" and "1e5" whatever their min says, so
+// tidy the value when the box loses focus rather than fighting every keystroke.
+function clampField(el, {min, max, int}){
+  const fix = () => {
+    // A number input reports "" for anything the browser refuses, such as
+    // "+300" or "abc". Falling back to the last good value beats snapping to
+    // the minimum, which loses what the person was doing.
+    let v = parseFloat(el.value);
+    if (!isFinite(v)) v = parseFloat(el.dataset.last);
+    if (!isFinite(v)) v = min;
+    v = Math.min(max, Math.max(min, v));
+    if (int) v = Math.round(v);
+    el.value = +v.toFixed(4);
+    el.dataset.last = el.value;
+  };
+  el.addEventListener('change', fix);
+  el.addEventListener('blur', fix);
+  el.min = min; el.max = max;
+  if (int) el.step = 1;
+}
+
+function resetAdvanced(){
+  ADVANCED.forEach(sel => {
+    const el = $(sel);
+    el.value = DEFAULTS[sel];
+    el.removeAttribute('data-chosen');      // epicycle counts go back to auto
+  });
+  const pen = $('#penColour');
+  pen.removeAttribute('data-chosen');
+  pen.value = getComputedStyle(document.documentElement)
+                .getPropertyValue('--trace').trim();     // the theme's pen
+  $('#advanced').open = false;
+}
 const state = {file:null, fileName:'', kind:null, values:{}, shapeParams:{}};
 
 // One tile per thing a person actually wants to draw. The old eight-way
@@ -113,7 +154,11 @@ function shapeParams(name){
       const inp = document.createElement('input');
       inp.type = 'number'; inp.value = v;
       inp.step = Number.isInteger(v) ? 1 : 0.1;
-      inp.oninput = () => state.shapeParams[k] = +inp.value;
+      const range = rangeFor(k);
+      clampField(inp, {int: Number.isInteger(v), ...range});   // range wins
+      const store = () => state.shapeParams[k] = +inp.value;
+      inp.oninput = store;
+      inp.addEventListener('change', store);   // after clamping, save the fix
       cell.appendChild(inp); row.appendChild(cell);
       const hint = document.createElement('span');
       hint.className = 'hint';
@@ -151,17 +196,9 @@ function showKind(kind){
   $('#intro').style.display    = kind ? 'none' : 'block';
   $('#advanced').style.display = kind ? 'block' : 'none';
   $('#footer').style.display   = kind ? 'flex'  : 'none';
-  if (!kind){
-    $('#advanced').open = false;
-    // Back at the tiles means starting over, so any epicycle counts you typed
-    // stop applying -- the next shape works its own out again.
-    $('#maxArms').removeAttribute('data-chosen');
-    $('#startArms').removeAttribute('data-chosen');
-    $('#penColour').removeAttribute('data-chosen');
-    $('#penColour').value = getComputedStyle(document.documentElement)
-                              .getPropertyValue('--trace').trim();  // theme's pen
-    return;
-  }
+  // Back at the tiles means starting over: every setting returns to its
+  // default, and the epicycle counts go back to being worked out per shape.
+  if (!kind){ resetAdvanced(); return; }
 
   const spec = KINDS[kind];
   $('#panelTitle').textContent = spec.title;
@@ -181,6 +218,19 @@ function showKind(kind){
   $('#footHint').textContent = spec.file
     ? 'or drop a file anywhere on this page' : '';
 }
+
+clampField($('#maxArms'), {min:10, max:4000, int:true});
+clampField($('#startArms'), {min:1, max:4000, int:true});
+
+// starting with more arms than the maximum is nonsense, so keep the pair sane
+$('#maxArms').addEventListener('change', () => {
+  const hi = +$('#maxArms').value;
+  if (+$('#startArms').value > hi) $('#startArms').value = hi;
+});
+$('#startArms').addEventListener('change', () => {
+  const lo = +$('#startArms').value;
+  if (lo > +$('#maxArms').value) $('#maxArms').value = lo;
+});
 
 document.querySelectorAll('.tile').forEach(t =>
   t.onclick = () => showKind(t.dataset.kind));

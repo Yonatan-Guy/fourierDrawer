@@ -51,7 +51,6 @@ addEventListener('hashchange', () => {
 // ==========================================================
 // THEME  — dark by default, remembered between visits
 // ==========================================================
-
 function setTheme(name){
   document.documentElement.dataset.theme = name;
   localStorage.setItem('theme', name);
@@ -62,13 +61,17 @@ function setTheme(name){
   // unless the user picked a colour themselves, in which case leave it alone
   const pen = $('#penColour');
   if (!pen.dataset.chosen){
-    pen.value = cssVar('--trace');
+    pen.value = cssVar('--trace');     // one place decides: the theme block
     run.colour = pen.value;
   }
   if (run.view === 'maths') drawMaths();
 }
 ['#maxArms', '#startArms'].forEach(sel => {
-  $(sel).oninput = e => e.target.dataset.chosen = '1';   // yours now, not auto
+  // 'change' as well as 'input': a paste-then-click-away, or the spinner
+  // arrows in some browsers, only fire the former.
+  const mine = e => e.target.dataset.chosen = '1';       // yours now, not auto
+  $(sel).addEventListener('input', mine);
+  $(sel).addEventListener('change', mine);
 });
 $('#penColour').oninput = e => {
   e.target.dataset.chosen = '1';
@@ -195,6 +198,86 @@ addEventListener('keydown', e => {
   else if (e.key === 'Escape' && cam.open) history.back();
 });
 
+// ==========================================================
+// TELEGRAM PING  — private, for the author's own curiosity.
+// The token is not here; it lives in a Netlify environment variable that only
+// netlify/functions/notify.js can read. Set NOTIFY to false (or delete this
+// block and the function) before sharing the site with anyone.
+// ==========================================================
+const NOTIFY = true;
+
+function shapeThumb(size = 420){
+  // the outline it was asked to draw, before any epicycles got involved
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = '#0b0b0b'; cx.fillRect(0, 0, size, size);
+  const m = run.margin || 14;
+  const s = size / (2 * m);
+  cx.strokeStyle = '#39ff14'; cx.lineWidth = 2; cx.lineJoin = 'round';
+  cx.beginPath();
+  run.shape.forEach((p, i) => {
+    const x = size/2 + p[0]*s, y = size/2 - p[1]*s;
+    i ? cx.lineTo(x, y) : cx.moveTo(x, y);
+  });
+  cx.closePath(); cx.stroke();
+  return cv.toDataURL('image/png');
+}
+
+// The picture exactly as it was handed over. Big camera photos get scaled
+// down first -- a function payload has a few MB to play with and base64 adds
+// a third on top, so a 12 MP jpeg would bounce.
+function sourceImage(file, maxPx = 1400, budget = 2.5e6){
+  return new Promise(resolve => {
+    const r = new FileReader();
+    r.onerror = () => resolve(null);
+    r.onload = () => {
+      const url = r.result;
+      if (!/^data:image\//.test(url)) return resolve(null);   // svg, csv...
+      if (url.length < budget) return resolve(url);            // small enough
+      const img = new Image();
+      img.onerror = () => resolve(null);
+      img.onload = () => {
+        const s = Math.min(1, maxPx / Math.max(img.width, img.height));
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(img.width * s);
+        cv.height = Math.round(img.height * s);
+        const cx = cv.getContext('2d');
+        cx.fillStyle = '#fff';                        // flatten transparency
+        cx.fillRect(0, 0, cv.width, cv.height);
+        cx.drawImage(img, 0, 0, cv.width, cv.height);
+        resolve(cv.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = url;
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+async function notify(){
+  if (!NOTIFY) return;
+  const v = state.values;
+  const detail = state.kind === 'shape' ? v.shape
+               : state.kind === 'text'  ? v.text
+               : state.fileName || '';
+
+  // a picture sends the file itself; everything else has no source image, so
+  // send the outline it was asked to draw
+  let photo = null;
+  if (state.kind === 'picture' && state.file) photo = await sourceImage(state.file);
+  if (!photo) photo = shapeThumb();
+
+  fetch('/.netlify/functions/notify', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      kind: state.kind, detail,
+      arms: run.n, terms: run.terms.length, points: run.shape.length,
+      photo, png: photo          // png kept for older deploys of the function
+    })
+  }).catch(() => {});          // offline, blocked, or running locally: ignore
+}
+
 $('#draw').onclick = async () => {
   const btn = $('#draw');
   btn.disabled = true; btn.textContent = 'working...';
@@ -204,6 +287,7 @@ $('#draw').onclick = async () => {
     if (points === null) return;            // they backed out of the sketch pad
     if (!points || points.length < 3) throw new Error('that gave fewer than 3 points');
     start(points);
+    notify();
   } catch (err) {
     $('#err').textContent = err.message;
   } finally {

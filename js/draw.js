@@ -64,7 +64,9 @@ function start(points){
   run.shape = center(resample(points, N));
 
   const auto = !$('#maxArms').dataset.chosen;
-  const cap = auto ? Math.min(N, 4000) : +$('#maxArms').value;
+  const typed = Math.round(+$('#maxArms').value);
+  const cap = auto ? Math.min(N, 4000)
+                   : Math.min(4000, Math.max(10, isFinite(typed) ? typed : 400));
   run.terms = fourier(run.shape, cap);
 
   let radius = 0;
@@ -86,7 +88,9 @@ function start(points){
 
   run.colour = $('#penColour').value;
   run.step = +$('#speed').value;
-  run.n = Math.min(+$('#startArms').value, run.terms.length);
+  const wanted = Math.round(+$('#startArms').value);
+  run.n = Math.min(Math.max(1, isFinite(wanted) ? wanted : 50), run.terms.length);
+  $('#startArms').value = run.n;          // show what was actually used
   run.k = 0; run.trace = []; run.paused = false; run.waves = null;
 
   run.margin = (radius || 10) * 1.35;
