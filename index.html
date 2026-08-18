@@ -3,7 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Fourier drawing</title>
+<title>Fourier Drawer</title>
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="48x48" href="assets/favicon-48.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#0b0b0b">
+<meta name="description" content="Draw anything with a chain of spinning circles — a Fourier series you can watch.">
+<link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fourier">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -63,10 +74,10 @@
       <summary>Advanced settings</summary>
       <div class="row"><label>max epicycles</label>
         <input type="number" id="maxArms" value="1000" min="1" max="4000">
-        <span class="hint">the top of the slider</span></div>
+        <span class="hint">left alone, both are worked out from the shape</span></div>
       <div class="row"><label>epicycles at start</label>
         <input type="number" id="startArms" value="50" min="1">
-        <span class="hint">start low, slide up to watch it sharpen</span></div>
+        <span class="hint">by default, enough to be within 1% of the shape</span></div>
       <div class="row"><label>speed</label>
         <select id="speed"><option selected>1</option><option>2</option>
           <option>4</option><option>8</option></select>

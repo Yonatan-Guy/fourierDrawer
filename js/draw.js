@@ -6,8 +6,9 @@
 // ==========================================================
 // THE ANIMATION
 // ==========================================================
-// 1200 frames to a lap: 1x is a slow, watchable pace and 8x is still smooth.
-const N_FRAMES = 1200, TRACE_DETAIL = 8, SPEEDS = [1, 2, 4, 8];
+// 2400 frames to a lap. At 1x that is a slow, watchable crawl -- you can
+// follow individual arms -- and 16x still finishes in a couple of seconds.
+const N_FRAMES = 2400, TRACE_DETAIL = 8, SPEEDS = [1, 2, 4, 8, 16];
 
 // Canvas colours cannot use CSS variables directly, so read them at draw time.
 // That is what makes the light theme reach the drawing as well as the page.
@@ -35,18 +36,60 @@ function fitCanvas(cv, cx){
   return {w:r.width, h:r.height};
 }
 
+// How many arms you need before the ones you drop stop mattering.
+//
+// Two tempting tests both fail. Share of total amplitude is wrong: a traced
+// outline leaves thousands of microscopic terms, and 3000 terms of amplitude
+// 0.00003 still sum to something, so "99.9% of the amplitude" drags you deep
+// into invisible noise. Adding the leftovers up as a worst case is wrong the
+// same way -- it assumes every discarded arm points in the same direction.
+//
+// What the eye sees is the typical deviation, which by Parseval is the root of
+// the summed squares of the discarded amplitudes. Compare that to the shape's
+// own radius and the number comes out sane for every kind of input.
+function armsForError(terms, radius, frac){
+  const rms = new Array(terms.length);
+  let s = 0;
+  for (let i = terms.length - 1; i >= 0; i--){
+    rms[i] = Math.sqrt(s);
+    s += terms[i].amp * terms[i].amp;
+  }
+  const limit = frac * radius;
+  for (let i = 0; i < rms.length; i++) if (rms[i] <= limit) return i + 1;
+  return terms.length;
+}
+
 function start(points){
   const N = +$('#nSamples').value;
   run.shape = center(resample(points, N));
-  run.terms = fourier(run.shape, +$('#maxArms').value);
+
+  const auto = !$('#maxArms').dataset.chosen;
+  const cap = auto ? Math.min(N, 4000) : +$('#maxArms').value;
+  run.terms = fourier(run.shape, cap);
+
+  let radius = 0;
+  for (const p of run.shape) radius = Math.max(radius, Math.hypot(p[0], p[1]));
+
+  if (auto){
+    // max: leftover wobble under 0.1% of the shape -- well under a pixel.
+    // Rounded up to a round fifty.
+    const hi = Math.min(Math.ceil(armsForError(run.terms, radius, 0.001) / 50) * 50,
+                        run.terms.length, 2000);   // a phone-friendly ceiling
+    run.terms = run.terms.slice(0, Math.max(hi, 50));
+    $('#maxArms').value = run.terms.length;
+    if (!$('#startArms').dataset.chosen){
+      // start: within about 1% of the shape -- recognisable, still rounded
+      const lo = Math.max(10, Math.floor(armsForError(run.terms, radius, 0.01) / 10) * 10);
+      $('#startArms').value = Math.min(lo, run.terms.length);
+    }
+  }
+
   run.colour = $('#penColour').value;
   run.step = +$('#speed').value;
   run.n = Math.min(+$('#startArms').value, run.terms.length);
   run.k = 0; run.trace = []; run.paused = false; run.waves = null;
 
-  let max = 0;
-  for (const p of run.shape) max = Math.max(max, Math.hypot(p[0], p[1]));
-  run.margin = (max || 10) * 1.35;
+  run.margin = (radius || 10) * 1.35;
 
   const s = $('#arms');
   s.max = run.terms.length; s.value = run.n; $('#armsVal').textContent = run.n;

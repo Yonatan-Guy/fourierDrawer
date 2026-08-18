@@ -68,6 +68,9 @@ function setTheme(name){
   }
   if (run.view === 'maths') drawMaths();
 }
+['#maxArms', '#startArms'].forEach(sel => {
+  $(sel).oninput = e => e.target.dataset.chosen = '1';   // yours now, not auto
+});
 $('#penColour').oninput = e => {
   e.target.dataset.chosen = '1';
   run.colour = e.target.value;

@@ -182,7 +182,7 @@
   #hud3d #close3d{pointer-events:auto;margin-left:10px}
 
   /* ---------- theme toggle ---------- */
-  #themeBtn{position:fixed;top:14px;left:16px;z-index:12;padding:6px 12px;
+  #themeBtn{position:fixed;top:14px;left:16px;z-index:25;padding:6px 12px;
             font-size:12px;opacity:.75}
   #themeBtn:hover{opacity:1}
   #bar #themeBar{padding:8px 10px}
