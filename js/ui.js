@@ -151,7 +151,14 @@ function showKind(kind){
   $('#intro').style.display    = kind ? 'none' : 'block';
   $('#advanced').style.display = kind ? 'block' : 'none';
   $('#footer').style.display   = kind ? 'flex'  : 'none';
-  if (!kind){ $('#advanced').open = false; return; }
+  if (!kind){
+    $('#advanced').open = false;
+    // Back at the tiles means starting over, so any epicycle counts you typed
+    // stop applying -- the next shape works its own out again.
+    $('#maxArms').removeAttribute('data-chosen');
+    $('#startArms').removeAttribute('data-chosen');
+    return;
+  }
 
   const spec = KINDS[kind];
   $('#panelTitle').textContent = spec.title;
