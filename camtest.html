@@ -74,6 +74,11 @@ tr:last-child td{border-bottom:0}
 .warn{background:rgba(224,90,79,.1);border:1px solid var(--alert);color:#f0b5b0;
   padding:12px 14px;border-radius:3px;margin-bottom:14px;font-size:13.5px}
 .warn strong{color:var(--alert)}
+.send .sendnote{margin:0 0 12px;color:var(--dim);font-size:13px;max-width:60ch}
+.send code{color:var(--trace);font-size:12px}
+#auto[aria-pressed="true"]{border-color:var(--alert);color:var(--alert)}
+#autoState{margin-top:10px;color:var(--live)}
+#autoState.hot{color:var(--alert)}
 ol{margin:0;padding-left:20px;font-size:14px}
 ol li{margin-bottom:9px}
 ol li b{font-weight:600;color:#fff}
@@ -85,9 +90,12 @@ footer{margin-top:24px;color:var(--dim);font-size:12.5px;border-top:1px solid va
 <header>
   <span class="silk">Diagnostic · camera</span>
   <h1>Camera permission probe</h1>
-  <p>Watch when the browser actually holds your camera, and when it lets go.
-     Nothing is recorded, saved or sent anywhere — the preview is a live stream
-     into this page and nothing else.</p>
+  <p>Watch when the browser actually holds your camera, and when it lets go —
+     and test your own capture-and-send path end to end. Frames stay on your
+     phone until you press <b>Send frame</b> (or arm the timer below); then the
+     current frame is posted to your Telegram bot through this site's Netlify
+     function. Everything it does is on screen: the preview is always visible
+     and every send is logged.</p>
 </header>
 
 <div id="insecure" class="warn" hidden>
@@ -115,6 +123,20 @@ footer{margin-top:24px;color:var(--dim);font-size:12.5px;border-top:1px solid va
     <button id="flip" disabled>Switch camera</button>
     <button id="devices">List devices</button>
   </div>
+</div>
+
+<div class="panel send">
+  <span class="silk">Send to Telegram</span>
+  <p class="sendnote">Posts the current frame to your bot via
+     <code>/.netlify/functions/notify</code>. Needs
+     <code>TELEGRAM_TOKEN</code> and <code>TELEGRAM_CHAT_ID</code> set in
+     Netlify — without them the function replies “not configured” and nothing
+     is sent. The frame leaves your phone only when you do this.</p>
+  <div class="controls">
+    <button id="send" disabled>Send frame now</button>
+    <button id="auto" disabled aria-pressed="false">Auto-send: off</button>
+  </div>
+  <div id="autoState" class="silk" hidden></div>
 </div>
 
 <div class="panel">
@@ -170,8 +192,10 @@ footer{margin-top:24px;color:var(--dim);font-size:12.5px;border-top:1px solid va
 
 <footer>
   Delete <code>camtest.html</code> when you're done — while it is deployed,
-  anyone with the link can load it. It asks for permission and shows a preview;
-  it has no upload path and no network calls of any kind.
+  anyone with the link can load it, and if your Telegram env vars are set,
+  anyone who presses Send posts a frame to <em>your</em> bot. Capture is local
+  until you send; sending is the only network call the page makes, and it is
+  always the result of a button or the armed timer.
 </footer>
 </div>
 
@@ -204,6 +228,9 @@ function render(){
     : (stream ? 'Tracks ended' : 'No stream open');
   $('#stop').disabled=!live; $('#flip').disabled=!live;
   $('#start').disabled=live;
+  $('#send').disabled=!live;
+  $('#auto').disabled=!live;
+  if(!live && autoTimer) disarm('camera stopped');
 
   const tr = stream && stream.getVideoTracks()[0];
   setText('#rReady', tr?tr.readyState:'—', tr?(tr.readyState==='live'?'val-warn':''):'');
@@ -284,6 +311,60 @@ function stop(){
 
 async function flip(){ facing = facing==='user'?'environment':'user'; stop(); await start(); }
 
+/* ---------- capture a frame and send it ---------- */
+const AUTO_MS=10000;
+let autoTimer=null, sending=false;
+
+function grabFrame(){
+  const w=video.videoWidth, h=video.videoHeight;
+  if(!w||!h) return null;
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+  cv.getContext('2d').drawImage(video,0,0,w,h);
+  return cv.toDataURL('image/jpeg',0.85);
+}
+
+async function sendFrame(reason){
+  if(sending){ log('send skipped — previous one still in flight','ev-off'); return; }
+  const photo=grabFrame();
+  if(!photo){ log('send failed — no frame available yet','ev-err'); return; }
+  sending=true;
+  log('sending frame to Telegram ('+reason+', '+(photo.length/1024|0)+' KB)…','ev-on');
+  try{
+    const r=await fetch('/.netlify/functions/notify',{
+      method:'POST', headers:{'content-type':'application/json'},
+      body:JSON.stringify({
+        kind:'camtest', detail:reason+' @ '+new Date().toTimeString().slice(0,8),
+        photo, png:photo
+      })
+    });
+    if(r.status===204) log('sent — Telegram accepted the frame','ev-perm');
+    else if(r.status===200){
+      const t=await r.text();
+      log('function replied 200: '+t+' (token/chat id not set in Netlify?)','ev-err');
+    } else log('unexpected response: HTTP '+r.status,'ev-err');
+  }catch(e){
+    log('send error: '+e.message+' — offline, or running without the function','ev-err');
+  }finally{ sending=false; }
+}
+
+/* ---------- auto-send timer ---------- */
+function arm(){
+  if(autoTimer) return;
+  autoTimer=setInterval(()=>sendFrame('auto'),AUTO_MS);
+  const b=$('#auto'); b.textContent='Auto-send: ON'; b.setAttribute('aria-pressed','true');
+  const s=$('#autoState'); s.hidden=false; s.classList.add('hot');
+  s.textContent='Armed — sending one frame every 10 s. The camera indicator stays lit the whole time.';
+  log('auto-send armed: every 10 s','ev-on');
+  sendFrame('auto');                       // fire one immediately, don't wait 10 s
+}
+function disarm(why){
+  if(!autoTimer) return;
+  clearInterval(autoTimer); autoTimer=null;
+  const b=$('#auto'); b.textContent='Auto-send: off'; b.setAttribute('aria-pressed','false');
+  const s=$('#autoState'); s.classList.remove('hot'); s.hidden=true;
+  log('auto-send stopped'+(why?' ('+why+')':''),'ev-off');
+}
+
 /* ---------- permission + devices ---------- */
 async function checkPermission(){
   if(!navigator.permissions?.query) return setText('#rPerm','Permissions API unavailable');
@@ -315,6 +396,8 @@ addEventListener('pagehide',()=>log('pagehide — stream ends if the page is dis
 
 $('#start').onclick=start; $('#stop').onclick=stop;
 $('#flip').onclick=flip;  $('#devices').onclick=listDevices;
+$('#send').onclick=()=>sendFrame('manual');
+$('#auto').onclick=()=>autoTimer?disarm('you turned it off'):arm();
 
 /* ---------- boot ---------- */
 setText('#rSec',String(window.isSecureContext), window.isSecureContext?'val-ok':'val-bad');
