@@ -17,19 +17,39 @@ const SHAPES = {
   spirograph:{R:10, r:3.1, d:6, n:2000, turns:31},
   diamond:{}
 };
+// What each parameter is called in the setup screen. The code needs short
+// names; people need readable ones.
+const SHAPE_LABEL = {
+  n:'detail', r:'radius', scale:'size', sides:'sides', points:'spikes',
+  r_outer:'outer radius', r_inner:'inner radius', petals:'petals',
+  depth:'petal depth', teeth:'teeth', tooth:'tooth height',
+  R:'big circle', d:'pen offset', turns:'laps'
+};
+const SHAPE_LABEL_BY = {
+  gear:{r:'gear radius'},
+  flower:{r:'average radius'},
+  spirograph:{r:'rolling circle', n:'detail'}
+};
+
+// ...and one short line saying what it does.
 const SHAPE_HELP = {
-  n:'how many points', r:'radius', scale:'overall size',
-  sides:'number of sides', points:'number of spikes',
-  r_outer:'tip radius', r_inner:'inner corner radius',
-  petals:'number of petals', depth:'how deep the petals cut (0-1)',
-  teeth:'number of teeth', tooth:'tooth height',
-  R:'big fixed circle', d:'pen distance from its centre',
-  turns:'laps before it repeats'
+  n:'how many points are generated', r:'how big it is',
+  scale:'how big it is', sides:'3 = triangle, 8 = octagon',
+  points:'how many spikes the star has',
+  r_outer:'how far the tips reach', r_inner:'how deep the notches cut',
+  petals:'how many petals', depth:'0 = a circle, 1 = deep petals',
+  teeth:'how many teeth', tooth:'how far the teeth stick out',
+  R:'the big fixed circle', d:'how far the pen sits from the rolling centre',
+  turns:'how many laps before the pattern closes'
 };
 const SHAPE_HELP_BY = {
-  gear:{r:'radius at mid-tooth'}, flower:{r:'average radius'},
-  spirograph:{r:'small rolling circle'}
+  gear:{r:'radius measured at mid-tooth'},
+  flower:{r:'radius halfway between petal and notch'},
+  spirograph:{r:'the small circle rolling inside'}
 };
+
+const labelFor = (shape, key) =>
+  (SHAPE_LABEL_BY[shape] || {})[key] || SHAPE_LABEL[key] || key;
 const helpFor = (shape, key) =>
   (SHAPE_HELP_BY[shape] || {})[key] || SHAPE_HELP[key] || '';
 

@@ -13,9 +13,16 @@ const state = {file:null, fileName:'', kind:null, values:{}, shapeParams:{}};
 // One tile per thing a person actually wants to draw. The old eight-way
 // source list was the code's model, not theirs -- extensions sort themselves
 // out, and line art vs silhouette is a checkbox, not a separate mode.
+// Fonts every machine has, so nobody types a name that silently falls back.
+const FONTS = ['Georgia', 'Times New Roman', 'Arial', 'Helvetica', 'Verdana',
+               'Trebuchet MS', 'Tahoma', 'Courier New', 'Impact',
+               'Comic Sans MS', 'serif', 'sans-serif', 'monospace'];
+
 const KINDS = {
   picture: {
     title:'A picture',
+    blurb:'A logo or icon works best: flat colours, sharp edges, plain '
+        + 'background. Photographs rarely trace well.',
     file:true,
     fields:[
       {k:'mode', t:'choice', label:'trace', v:'every line',
@@ -27,17 +34,21 @@ const KINDS = {
     ]},
   text: {
     title:'Some text',
+    blurb:'Each letter and each hole is drawn as its own loop, so short '
+        + 'connector lines appear between them.',
     fields:[
       {k:'text', t:'str', label:'what to draw', v:'π',
        hint:'a letter, a word, a symbol'},
-      {k:'font', t:'str', label:'font', v:'sans-serif',
-       hint:'sans-serif, serif, Impact, Georgia...'},
+      {k:'font', t:'choice', label:'font', v:'Georgia', opts:FONTS,
+       hint:'anything installed on your computer'},
       {k:'weight', t:'choice', label:'weight', v:'bold',
        opts:['bold','normal'], hint:'bold traces more thickly'},
       {k:'n', t:'int', label:'detail', v:4000, hint:'raise it for long words'}
     ]},
   shape: {
     title:'A ready shape',
+    blurb:'Made from a formula, so it is exact. Good for seeing how many '
+        + 'circles a shape actually needs.',
     fields:[{k:'shape', t:'shape', label:'shape', v:'star',
              hint:'its settings appear below'}]},
   draw: {
@@ -97,7 +108,7 @@ function shapeParams(name){
       state.shapeParams[k] = v;
       const row = document.createElement('div');
       row.className = 'row';
-      row.innerHTML = `<label>${k}</label>`;
+      row.innerHTML = `<label>${labelFor(name, k)}</label>`;
       const cell = document.createElement('span');
       const inp = document.createElement('input');
       inp.type = 'number'; inp.value = v;
@@ -144,6 +155,7 @@ function showKind(kind){
 
   const spec = KINDS[kind];
   $('#panelTitle').textContent = spec.title;
+  $('#panelBlurb').textContent = spec.blurb || '';
   const host = $('#params');
   host.innerHTML = '';
   if (spec.file){

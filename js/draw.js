@@ -6,7 +6,20 @@
 // ==========================================================
 // THE ANIMATION
 // ==========================================================
-const N_FRAMES = 600, TRACE_DETAIL = 8, SPEEDS = [1, 2, 4, 8];
+// 1200 frames to a lap: 1x is a slow, watchable pace and 8x is still smooth.
+const N_FRAMES = 1200, TRACE_DETAIL = 8, SPEEDS = [1, 2, 4, 8];
+
+// Canvas colours cannot use CSS variables directly, so read them at draw time.
+// That is what makes the light theme reach the drawing as well as the page.
+const themeCache = {};
+function cssVar(name){
+  const key = name + document.documentElement.dataset.theme;
+  if (!themeCache[key])
+    themeCache[key] = getComputedStyle(document.documentElement)
+                        .getPropertyValue(name).trim() || '#888';
+  return themeCache[key];
+}
+function clearThemeCache(){ for (const k in themeCache) delete themeCache[k]; }
 const run = {terms:[], shape:[], k:0, step:2, n:8, paused:false, trace:[],
              guide:false, big:false, waves:null, colour:'#ff2d2d',
              looping:false, view:'setup'};   // one animation loop per session
@@ -79,14 +92,14 @@ function drawFrame(){
   const joints = armChain(t, run.n);
 
   if (run.guide){                                     // dashed target
-    mainCx.strokeStyle = '#3a3a3a'; mainCx.lineWidth = 1;
+    mainCx.strokeStyle = cssVar('--target'); mainCx.lineWidth = 1;
     mainCx.setLineDash([5, 4]); mainCx.beginPath();
     run.shape.forEach((p, i) => { const q = px(p);
       i ? mainCx.lineTo(q[0], q[1]) : mainCx.moveTo(q[0], q[1]); });
     mainCx.closePath(); mainCx.stroke(); mainCx.setLineDash([]);
   }
 
-  mainCx.strokeStyle = 'rgba(255,255,255,.28)'; mainCx.lineWidth = 1;
+  mainCx.strokeStyle = cssVar('--circle'); mainCx.lineWidth = 1;
   for (let i = 0; i < run.n; i++){                    // the circles
     const r = run.terms[i].amp * scale;
     if (r < 1.2) continue;
@@ -94,7 +107,7 @@ function drawFrame(){
     mainCx.beginPath(); mainCx.arc(c[0], c[1], r, 0, 6.2832); mainCx.stroke();
   }
 
-  mainCx.strokeStyle = 'rgba(255,255,255,.75)'; mainCx.lineWidth = 1.2;
+  mainCx.strokeStyle = cssVar('--arm'); mainCx.lineWidth = 1.2;
   mainCx.beginPath();                                 // the arms
   joints.forEach((p, i) => { const q = px(p);
     i ? mainCx.lineTo(q[0], q[1]) : mainCx.moveTo(q[0], q[1]); });
@@ -110,7 +123,6 @@ function drawFrame(){
   $('#title').textContent =
     `${run.n} of ${run.terms.length} epicycles   |   speed ${run.step}x` +
     (run.paused ? '   |   paused' : '');
-
 }
 
 function buildWaves(){                      // recomputed only when n changes
@@ -129,18 +141,18 @@ function drawWaves(){
   const pad = 34, ph = (h - pad) / 3;
   const t = run.k / N_FRAMES;
   const panels = [
-    {name:'x(t)',        data:run.waves.x, col:'#4dc3ff', span:run.margin},
-    {name:'y(t)',        data:run.waves.y, col:'#ffb347', span:run.margin},
-    {name:'x(t) + y(t)', data:null,        col:'#b48cff', span:run.margin*2}
+    {name:'x(t)',        data:run.waves.x, col:cssVar('--x'), span:run.margin},
+    {name:'y(t)',        data:run.waves.y, col:cssVar('--y'), span:run.margin},
+    {name:'x(t) + y(t)', data:null,        col:cssVar('--sum'), span:run.margin*2}
   ];
   panels.forEach((p, idx) => {
     const top = 8 + idx * ph, mid = top + ph/2 - 6;
-    waveCx.strokeStyle = '#222'; waveCx.lineWidth = 1;
+    waveCx.strokeStyle = cssVar('--grid'); waveCx.lineWidth = 1;
     waveCx.beginPath(); waveCx.moveTo(pad, mid); waveCx.lineTo(w-8, mid); waveCx.stroke();
-    waveCx.fillStyle = '#8b8b8b'; waveCx.font = '10px system-ui';
-    waveCx.fillText(p.name, 4, top + 12);
+    waveCx.fillStyle = p.col; waveCx.font = '600 13px system-ui';
+    waveCx.fillText(p.name, 6, top + 15);
 
-    const M = run.waves.x.length, sy = (ph/2 - 14) / p.span;
+    const M = run.waves.x.length, sy = (ph/2 - 22) / p.span;
     waveCx.strokeStyle = p.col; waveCx.lineWidth = 1.6; waveCx.beginPath();
     for (let i = 0; i < M; i++){
       const v = p.data ? p.data[i] : run.waves.x[i] + run.waves.y[i];
@@ -150,15 +162,15 @@ function drawWaves(){
     waveCx.stroke();
 
     const X = pad + (w - pad - 8) * t;                 // time cursor
-    waveCx.strokeStyle = 'rgba(232,232,232,.35)'; waveCx.lineWidth = 1;
+    waveCx.strokeStyle = cssVar('--cursor'); waveCx.lineWidth = 1;
     waveCx.beginPath(); waveCx.moveTo(X, top); waveCx.lineTo(X, top + ph - 8);
     waveCx.stroke();
     const pen = penAt(t, run.n);
     const v = p.data ? (idx ? pen[1] : pen[0]) : pen[0] + pen[1];
-    waveCx.fillStyle = '#e8e8e8';
+    waveCx.fillStyle = cssVar('--fg');
     waveCx.beginPath(); waveCx.arc(X, mid - v * sy, 3, 0, 6.2832); waveCx.fill();
   });
-  waveCx.fillStyle = '#8b8b8b'; waveCx.font = '10px system-ui';
+  waveCx.fillStyle = cssVar('--dim'); waveCx.font = '10px system-ui';
   waveCx.fillText('t  (one full lap)', w - 96, h - 4);
 }
 

@@ -64,7 +64,7 @@ function draw3d(){
     cx3d.stroke();
   };
 
-  cx3d.strokeStyle = '#242424'; cx3d.lineWidth = 1;      // the box
+  cx3d.strokeStyle = cssVar('--grid'); cx3d.lineWidth = 1;   // the box
   const corners = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],
                    [-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
   [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],
@@ -73,17 +73,17 @@ function draw3d(){
     cx3d.beginPath(); cx3d.moveTo(p[0],p[1]); cx3d.lineTo(q[0],q[1]); cx3d.stroke();
   });
 
-  line(onX, 'rgba(77,195,255,.55)', 1);
-  line(onY, 'rgba(255,179,71,.55)', 1);
-  line(flat, 'rgba(255,255,255,.65)', 1.2);
+  line(onX, cssVar('--x'), 1);
+  line(onY, cssVar('--y'), 1);
+  line(flat, cssVar('--arm'), 1.2);
   line(path, run.colour, 1.8);
 
   const t = run.k / N_FRAMES, pen = penAt(t, run.n);     // where the pen is now
   const now = project([t*2-1, pen[0]/m, pen[1]/m], w, h);
-  cx3d.fillStyle = '#fff';
+  cx3d.fillStyle = cssVar('--fg');
   cx3d.beginPath(); cx3d.arc(now[0], now[1], 4, 0, 6.2832); cx3d.fill();
 
-  cx3d.fillStyle = '#8b8b8b'; cx3d.font = '11px system-ui';
+  cx3d.fillStyle = cssVar('--dim'); cx3d.font = '11px system-ui';
   const lab = (p, s) => { const q = project(p, w, h); cx3d.fillText(s, q[0], q[1]); };
   lab([1.15,-1,-1], 't');  lab([-1,1.15,-1], 'x(t)');  lab([-1,-1,1.15], 'y(t)');
   const near = (a, b) => Math.abs(a - b) < 0.02;
@@ -94,8 +94,8 @@ function draw3d(){
     : near(cam.yaw, 0) && near(cam.pitch, 0)
       ? 'y against t — the same terms as sines'
     : '';
-  if (note){ cx3d.fillStyle = '#6b6b6b'; cx3d.fillText(note, 14, 22); }
-  cx3d.fillStyle = '#6b6b6b';
+  if (note){ cx3d.fillStyle = cssVar('--dim'); cx3d.fillText(note, 14, 22); }
+  cx3d.fillStyle = cssVar('--dim');
   cx3d.fillText(run.n + ' epicycles', 14, h - 14);
 }
 

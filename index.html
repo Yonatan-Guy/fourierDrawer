@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+<button id="themeBtn" title="switch theme">☀ light</button>
 <!-- ============ setup screen ============ -->
 <div id="setup">
   <div id="setupInner">
@@ -52,7 +53,7 @@
     <div id="panel">
       <div id="panelHead">
         <b id="panelTitle"></b>
-        <button id="changeKind" class="link">change</button>
+        <p id="panelBlurb"></p>
       </div>
       <div id="params"></div>
       <div id="err"></div>
@@ -83,6 +84,7 @@
     </details>
 
     <div id="footer">
+      <button id="changeKind" class="back">← back</button>
       <span class="hint" id="footHint">or drop a file anywhere on this page</span>
       <button id="draw">Draw it</button>
     </div>
@@ -151,7 +153,14 @@
       <canvas id="draw2d"></canvas>
       <div id="title"></div>
     </div>
-    <div id="side"><canvas id="waves"></canvas></div>
+    <div id="side">
+      <canvas id="waves"></canvas>
+      <div id="waveInfo">
+        <button class="info" data-tip="Where the pen is left-to-right, over one full lap. Every epicycle adds one cosine wave to this.">i</button>
+        <button class="info" data-tip="Where the pen is up-and-down, over the same lap. The same epicycles, as sines.">i</button>
+        <button class="info" data-tip="The two added together — the pen's position along the 45° diagonal. A third view of the same motion.">i</button>
+      </div>
+    </div>
   </div>
   <div id="bar">
     <div id="armsWrap">
@@ -168,11 +177,14 @@
       <button id="bBig">Big view</button>
       <button id="b3d">3D</button>
       <button id="bMath">Maths</button>
-      <button id="bSetup" class="cta">Setup</button>
+      <button id="bSettings">Settings</button>
+      <button id="bHome" class="cta">Home</button>
     </div>
     <span id="keys">space pause · h guide · c clear · b big · 3 the 3D view · m maths</span>
   </div>
 </div>
+
+<div id="tip"></div>
 
 <script src="js/math.js"></script>
 <script src="js/sources.js"></script>

@@ -35,13 +35,13 @@ function drawMaths(){
   const px = i => pad + (W-pad-10) * Math.log10(i+1) / Math.log10(terms.length+1);
   const py = a => 12 + (H-34) * (Math.log10(top) - Math.log10(a)) /
                               (Math.log10(top) - Math.log10(lo));
-  sx.strokeStyle = '#242424';
+  sx.strokeStyle = cssVar('--grid');
   [0,1,2,3,4,5,6].forEach(d => {                       // decades
     const a = top / Math.pow(10, d);
     if (a < lo) return;
     const y = py(a);
     sx.beginPath(); sx.moveTo(pad, y); sx.lineTo(W-10, y); sx.stroke();
-    sx.fillStyle = '#5a5a5a'; sx.font = '9px system-ui';
+    sx.fillStyle = cssVar('--dim'); sx.font = '9px system-ui';
     sx.fillText('1e-' + d, 4, y+3);
   });
   sx.strokeStyle = 'rgba(180,140,255,.45)'; sx.lineWidth = 1;   // a 1/k guide
@@ -56,10 +56,10 @@ function drawMaths(){
     i ? sx.lineTo(x,y) : sx.moveTo(x,y); });
   sx.stroke();
   const cut = px(n-1);                                  // where the slider sits
-  sx.strokeStyle = 'rgba(232,232,232,.4)'; sx.setLineDash([4,3]);
+  sx.strokeStyle = cssVar('--cursor'); sx.setLineDash([4,3]);
   sx.beginPath(); sx.moveTo(cut, 8); sx.lineTo(cut, H-14); sx.stroke();
   sx.setLineDash([]);
-  sx.fillStyle = '#8b8b8b'; sx.font = '10px system-ui';
+  sx.fillStyle = cssVar('--dim'); sx.font = '10px system-ui';
   sx.fillText('term number (log)', W-116, H-2);
   sx.fillText('slider: ' + n, Math.min(cut+4, W-70), 12);
 
@@ -70,11 +70,11 @@ function drawMaths(){
   cxr.clearRect(0,0,W2,H2);
   const total = amps.reduce((a,b) => a+b, 0);
   let acc = 0; const share = amps.map(a => (acc += a) / total);
-  cxr.strokeStyle = '#242424';
+  cxr.strokeStyle = cssVar('--grid');
   [0, 0.5, 0.9, 1].forEach(v => {
     const y = H2-20 - (H2-40)*v;
     cxr.beginPath(); cxr.moveTo(34, y); cxr.lineTo(W2-10, y); cxr.stroke();
-    cxr.fillStyle = '#5a5a5a'; cxr.font = '9px system-ui';
+    cxr.fillStyle = cssVar('--dim'); cxr.font = '9px system-ui';
     cxr.fillText((v*100) + '%', 4, y+3);
   });
   cxr.strokeStyle = run.colour; cxr.lineWidth = 1.8; cxr.beginPath();

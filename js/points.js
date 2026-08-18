@@ -50,21 +50,27 @@ async function getPoints(){
 }
 
 // ---- the mouse sketch pad ----
+// Cancelling resolves null, which the Draw handler treats as "never mind"
+// rather than an error.
 function sketch(){
   return new Promise(resolve => {
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:fixed;inset:0;background:#0c0c0c;z-index:20;'+
-      'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px';
-    wrap.innerHTML = '<div class="hint">drag to draw, then press Done</div>';
+    wrap.id = 'sketch';
+    wrap.innerHTML = '<div id="skHint" class="hint">drag to draw, then press Done</div>';
+
     const cv = document.createElement('canvas');
-    cv.width = 620; cv.height = 620;
-    cv.style.cssText = 'background:#141414;border:1px solid #2a2a2a;border-radius:8px;'+
-                       'width:620px;height:620px;cursor:crosshair';
+    cv.id = 'skCanvas';
+    const side = Math.min(620, Math.min(innerWidth, innerHeight) - 150);
+    cv.width = side; cv.height = side;
+    cv.style.width = side + 'px'; cv.style.height = side + 'px';
+
     const bar = document.createElement('div');
-    bar.style.cssText = 'display:flex;gap:8px';
-    bar.innerHTML = '<button id="skUndo">Undo</button>'+
-                    '<button id="skClear">Clear</button>'+
-                    '<button id="skDone" style="background:#1d4f6b">Done</button>';
+    bar.id = 'skBar';
+    bar.innerHTML =
+      '<button id="skBack" class="back">← back</button>' +
+      '<button id="skUndo">Undo</button>' +
+      '<button id="skClear">Clear</button>' +
+      '<button id="skDone" class="cta">Done</button>';
     wrap.append(cv, bar);
     document.body.appendChild(wrap);
 
@@ -73,17 +79,19 @@ function sketch(){
 
     const paint = () => {
       cx.clearRect(0, 0, cv.width, cv.height);
-      cx.strokeStyle = '#4dc3ff'; cx.lineWidth = 2;
+      cx.strokeStyle = cssVar('--x'); cx.lineWidth = 2; cx.lineJoin = 'round';
       cx.beginPath();
       pts.forEach((p, i) => i ? cx.lineTo(p[0], p[1]) : cx.moveTo(p[0], p[1]));
       cx.stroke();
       if (pts.length > 2){                       // the closing edge
-        cx.strokeStyle = '#555'; cx.setLineDash([5, 4]);
+        cx.strokeStyle = cssVar('--target'); cx.setLineDash([5, 4]);
         cx.beginPath();
         cx.moveTo(pts[pts.length-1][0], pts[pts.length-1][1]);
         cx.lineTo(pts[0][0], pts[0][1]); cx.stroke(); cx.setLineDash([]);
       }
-      wrap.firstChild.textContent = `drag to draw, then press Done   —   ${pts.length} points`;
+      wrap.querySelector('#skHint').textContent = pts.length
+        ? `${pts.length} points — press Done when you are happy`
+        : 'drag to draw, then press Done';
     };
     const at = e => {
       const r = cv.getBoundingClientRect();
@@ -93,13 +101,26 @@ function sketch(){
                               pts.push(at(e)); paint(); cv.setPointerCapture(e.pointerId); };
     cv.onpointermove = e => { if (drawing){ pts.push(at(e)); paint(); } };
     cv.onpointerup   = () => drawing = false;
+
+    const close = value => { wrap.remove(); resolve(value); };
+    bar.querySelector('#skBack').onclick  = () => close(null);
     bar.querySelector('#skUndo').onclick  = () => { if (marks.length) pts.length = marks.pop(); paint(); };
     bar.querySelector('#skClear').onclick = () => { pts = []; marks = []; paint(); };
     bar.querySelector('#skDone').onclick  = () => {
-      wrap.remove();
-      if (pts.length < 3) return resolve(makeShape('star', SHAPES.star));
-      resolve(normalise(pts.map(p => [p[0], -p[1]])));
+      if (pts.length < 3){                       // nothing to draw yet
+        const hint = wrap.querySelector('#skHint');
+        hint.textContent = 'the drawing is empty — draw something first';
+        hint.classList.add('warn');
+        setTimeout(() => hint.classList.remove('warn'), 1800);
+        return;
+      }
+      close(normalise(pts.map(p => [p[0], -p[1]])));
     };
+    addEventListener('keydown', function esc(e){
+      if (e.key === 'Escape' && document.body.contains(wrap)){
+        removeEventListener('keydown', esc); close(null);
+      }
+    });
     paint();
   });
 }
