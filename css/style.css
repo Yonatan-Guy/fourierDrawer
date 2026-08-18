@@ -178,6 +178,9 @@
   #view3d canvas:active{cursor:grabbing}
   #hud3d{position:absolute;top:12px;left:14px;right:14px;display:flex;
          align-items:center;gap:12px;pointer-events:none}
+  /* the theme button is fixed at top-left (z-index 25); give the HUD's first
+     item room so "the curve in time" doesn't sit under it */
+  #view3d #hud3d{padding-left:96px}
   #hud3d b{font-size:12px}
   #views3d{margin-left:auto;display:flex;gap:6px;pointer-events:auto;
            flex-wrap:wrap}
@@ -235,5 +238,6 @@
     #setup{padding-top:54px}
     #maths{padding-top:54px}
     #hud3d{top:54px}
+    #view3d #hud3d{padding-left:0}   /* cleared by the top:54px drop instead */
     #view3d #views3d{margin-left:0}
   }
